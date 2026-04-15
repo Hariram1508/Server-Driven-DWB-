@@ -20,6 +20,21 @@ export const SafeHTMLRenderer = ({
   //  the iframe itself instead of the full Next.js app)
   const NAV_INTERCEPTOR = `<script>
 (function() {
+    // Visual-editor-only layout guard.
+    // Keep header/footer link groups compact and wrapping in small canvas widths.
+    try {
+      var style = document.createElement('style');
+      style.textContent = [
+        'nav [class*="gap-6"]{column-gap:.75rem !important;row-gap:.5rem !important;flex-wrap:wrap !important;}',
+        'nav a{white-space:normal !important;}',
+        'footer [class*="space-y-2"]{line-height:1.45;}',
+        'footer [class*="space-y-2"] a{white-space:normal !important;max-width:100%;}',
+        'footer [class*="space-y-2"] span{margin:0 .25rem !important;}',
+        'footer p{overflow-wrap:anywhere;display:block;}'
+      ].join('');
+      document.head.appendChild(style);
+    } catch(ex) {}
+
   document.addEventListener('click', function(e) {
     var a = e.target.closest('a[href]');
     if (!a) return;

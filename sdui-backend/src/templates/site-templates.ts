@@ -11,47 +11,61 @@
  */
 
 export type TemplateType =
-  | 'college-home'        // Home: hero + quick stats + programs + news + events
-  | 'college-admissions'  // Admissions: apply steps + requirements + deadline
-  | 'college-programs'    // Programs: department cards + course list grid
-  | 'college-faculty'     // Faculty: profile cards + department tabs + bio
-  | 'college-about'       // About: history + vision/mission + accreditation + rankings
-  | 'college-campus'      // Campus Life: facilities + clubs + gallery
-  | 'college-events'      // Events & News: event cards + latest news
-  | 'college-contact'     // Contact: enquiry form + departments + map
-  | 'college-placements'  // Placements: stats + top recruiters + alumni
-  | 'college-gallery';    // Gallery: photo grid of campus & events
+  | "college-home" // Home: hero + quick stats + programs + news + events
+  | "college-admissions" // Admissions: apply steps + requirements + deadline
+  | "college-programs" // Programs: department cards + course list grid
+  | "college-faculty" // Faculty: profile cards + department tabs + bio
+  | "college-about" // About: history + vision/mission + accreditation + rankings
+  | "college-campus" // Campus Life: facilities + clubs + gallery
+  | "college-events" // Events & News: event cards + latest news
+  | "college-contact" // Contact: enquiry form + departments + map
+  | "college-placements" // Placements: stats + top recruiters + alumni
+  | "college-gallery"; // Gallery: photo grid of campus & events
 
 export const TEMPLATE_DESCRIPTIONS: Record<TemplateType, string> = {
-  'college-home':       'Homepage with hero, stats, programs overview, news, and events',
-  'college-admissions': 'Admissions page with apply steps, requirements, and deadline',
-  'college-programs':   'Programs/courses listing with department cards and details',
-  'college-faculty':    'Faculty directory with profile cards, bios, and departments',
-  'college-about':      'About page with history, vision, mission, and accreditation',
-  'college-campus':     'Campus life with facilities, clubs, and gallery',
-  'college-events':     'Events and news listing with dates and categories',
-  'college-contact':    'Contact page with enquiry form, departments, and map',
-  'college-placements': 'Placements page with stats, top recruiters, and alumni stories',
-  'college-gallery':    'Photo gallery of campus, events, and achievements',
+  "college-home":
+    "Homepage with hero, stats, programs overview, news, and events",
+  "college-admissions":
+    "Admissions page with apply steps, requirements, and deadline",
+  "college-programs":
+    "Programs/courses listing with department cards and details",
+  "college-faculty":
+    "Faculty directory with profile cards, bios, and departments",
+  "college-about":
+    "About page with history, vision, mission, and accreditation",
+  "college-campus": "Campus life with facilities, clubs, and gallery",
+  "college-events": "Events and news listing with dates and categories",
+  "college-contact": "Contact page with enquiry form, departments, and map",
+  "college-placements":
+    "Placements page with stats, top recruiters, and alumni stories",
+  "college-gallery": "Photo gallery of campus, events, and achievements",
 };
 
 export function suggestTemplate(name: string, purpose: string): TemplateType {
-  const t = (name + ' ' + purpose).toLowerCase();
-  if (/home|landing|main|index|welcome/.test(t)) return 'college-home';
-  if (/admiss|apply|enroll|join|application|registr/.test(t)) return 'college-admissions';
-  if (/program|course|department|curriculum|degree|stream|branch/.test(t)) return 'college-programs';
-  if (/faculty|professor|staff|teacher|lecturer|academic/.test(t)) return 'college-faculty';
-  if (/about|history|mission|vision|accred|overview|background/.test(t)) return 'college-about';
-  if (/campus|life|facilit|club|hostel|sport|amenity/.test(t)) return 'college-campus';
-  if (/event|news|notice|announc|calendar|happenings/.test(t)) return 'college-events';
-  if (/contact|reach|locat|address|enquir|support/.test(t)) return 'college-contact';
-  if (/placement|career|recruit|compan|alumni|job|internship/.test(t)) return 'college-placements';
-  if (/gallery|photo|image|picture|media/.test(t)) return 'college-gallery';
-  return 'college-home';
+  const t = (name + " " + purpose).toLowerCase();
+  if (/home|landing|main|index|welcome/.test(t)) return "college-home";
+  if (/admiss|apply|enroll|join|application|registr/.test(t))
+    return "college-admissions";
+  if (/program|course|department|curriculum|degree|stream|branch/.test(t))
+    return "college-programs";
+  if (/faculty|professor|staff|teacher|lecturer|academic/.test(t))
+    return "college-faculty";
+  if (/about|history|mission|vision|accred|overview|background/.test(t))
+    return "college-about";
+  if (/campus|life|facilit|club|hostel|sport|amenity/.test(t))
+    return "college-campus";
+  if (/event|news|notice|announc|calendar|happenings/.test(t))
+    return "college-events";
+  if (/contact|reach|locat|address|enquir|support/.test(t))
+    return "college-contact";
+  if (/placement|career|recruit|compan|alumni|job|internship/.test(t))
+    return "college-placements";
+  if (/gallery|photo|image|picture|media/.test(t)) return "college-gallery";
+  return "college-home";
 }
 
 export function getTemplate(type: string): string {
-  return TEMPLATES[(type as TemplateType)] ?? TEMPLATES['college-home'];
+  return TEMPLATES[type as TemplateType] ?? TEMPLATES["college-home"];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,9 +99,10 @@ const SHARED_NAV = `
   </nav>`;
 
 export const TEMPLATES: Record<TemplateType, string> = {
-
   // ─── 1. COLLEGE HOME ────────────────────────────────────────────────────
-  'college-home': HEAD('[PAGE_TITLE]') + `
+  "college-home":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-white text-gray-900 font-sans m-0">
 
   <!-- TOP BAR: notice / contact strip -->
@@ -197,7 +212,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 2. COLLEGE ADMISSIONS ───────────────────────────────────────────────
-  'college-admissions': HEAD('[PAGE_TITLE]') + `
+  "college-admissions":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-white text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -282,7 +299,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 3. COLLEGE PROGRAMS ─────────────────────────────────────────────────
-  'college-programs': HEAD('[PAGE_TITLE]') + `
+  "college-programs":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-gray-50 text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -343,7 +362,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 4. COLLEGE FACULTY ──────────────────────────────────────────────────
-  'college-faculty': HEAD('[PAGE_TITLE]') + `
+  "college-faculty":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-slate-50 text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -413,7 +434,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 5. COLLEGE ABOUT ────────────────────────────────────────────────────
-  'college-about': HEAD('[PAGE_TITLE]') + `
+  "college-about":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-stone-50 text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -489,7 +512,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 6. CAMPUS LIFE ───────────────────────────────────────────────────────
-  'college-campus': HEAD('[PAGE_TITLE]') + `
+  "college-campus":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-white text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -557,7 +582,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 7. EVENTS & NEWS ────────────────────────────────────────────────────
-  'college-events': HEAD('[PAGE_TITLE]') + `
+  "college-events":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-gray-50 text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -623,7 +650,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 8. CONTACT ──────────────────────────────────────────────────────────
-  'college-contact': HEAD('[PAGE_TITLE]') + `
+  "college-contact":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-white text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -671,7 +700,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 9. PLACEMENTS ───────────────────────────────────────────────────────
-  'college-placements': HEAD('[PAGE_TITLE]') + `
+  "college-placements":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-white text-gray-900 font-sans m-0">
 
 ${SHARED_NAV}
@@ -734,7 +765,9 @@ ${SHARED_NAV}
 </body></html>`,
 
   // ─── 10. GALLERY ─────────────────────────────────────────────────────────
-  'college-gallery': HEAD('[PAGE_TITLE]') + `
+  "college-gallery":
+    HEAD("[PAGE_TITLE]") +
+    `
 <body class="bg-gray-950 text-white font-sans m-0">
 
 ${SHARED_NAV}

@@ -61,7 +61,10 @@ const createHtmlCraftConfig = (
       isCanvas: true,
       props: existingRoot?.props ?? {
         backgroundColor: "#ffffff",
-        padding: "40px",
+        paddingTop: "40px",
+        paddingRight: "40px",
+        paddingBottom: "40px",
+        paddingLeft: "40px",
         minHeight: "800px",
       },
       displayName: existingRoot?.displayName ?? "Container",
