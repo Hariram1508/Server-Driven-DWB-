@@ -100,6 +100,50 @@ const getDeviceWidthLabel = (device: DeviceMode): string => {
   return "100%";
 };
 
+const sanitizeJsonConfig = (config: unknown): Record<string, unknown> => {
+  try {
+    const cfg = toCraftConfig(config);
+    const validResolvedNames = Object.keys(ComponentMapper);
+
+    const sanitizedConfig = { ...cfg };
+
+    Object.entries(sanitizedConfig).forEach(([nodeId, nodeData]) => {
+      const node = nodeData as Record<string, unknown> | undefined;
+      if (!node || typeof node !== "object") return;
+
+      const type = node.type as Record<string, unknown> | string | undefined;
+      let resolvedName: string | undefined;
+
+      if (type && typeof type === "object") {
+        resolvedName = type.resolvedName as string | undefined;
+      } else if (typeof type === "string") {
+        resolvedName = type;
+      }
+
+      if (!resolvedName || !validResolvedNames.includes(resolvedName)) {
+        sanitizedConfig[nodeId] = {
+          ...node,
+          type: { resolvedName: "Container" },
+          displayName: node.displayName || "Container",
+          props: node.props || {},
+        };
+      }
+    });
+
+    return sanitizedConfig;
+  } catch (error) {
+    console.error("Error sanitizing config:", error);
+    return {
+      ROOT: {
+        type: { resolvedName: "Container" },
+        isCanvas: true,
+        nodes: [],
+        props: {},
+      },
+    };
+  }
+};
+
 const canAutoSavePage = (pageData: EditorPageData) => !pageData.useHtml;
 
 // ─── Full-Page HTML Preview Overlay ─────────────────────────────────────────
@@ -803,7 +847,7 @@ const EditorWrapper = ({
               <Frame
                 data={
                   toCraftConfig(pageData?.jsonConfig)?.ROOT
-                    ? JSON.stringify(pageData.jsonConfig)
+                    ? JSON.stringify(sanitizeJsonConfig(pageData.jsonConfig))
                     : undefined
                 }
               >

@@ -16,10 +16,91 @@ import {
   Clipboard,
   ClipboardPaste,
   CheckSquare2,
+  MoreVertical,
 } from "lucide-react";
 import Button from "../ui/Button";
 import { APIHealthIndicator } from "./APIHealthIndicator";
 import { useEditorSelection } from "./EditorSelectionContext";
+
+const ToolsDropdown = ({
+  onCopy,
+  onPaste,
+  onSelectAll,
+  onUndo,
+  onRedo,
+  canCopy,
+  canPaste,
+  selectAllLabel,
+}: {
+  onCopy: () => void;
+  onPaste: () => void;
+  onSelectAll: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canCopy: boolean;
+  canPaste: boolean;
+  selectAllLabel: string;
+}) => {
+  return (
+    <div className="relative group">
+      <button
+        className="p-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 flex items-center justify-center"
+        title="More options"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+
+      <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 py-1">
+        <button
+          disabled={!canCopy}
+          onClick={() => {
+            onCopy();
+          }}
+          className="w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 disabled:text-gray-300 disabled:hover:bg-transparent transition-colors flex items-center gap-3"
+        >
+          <Clipboard className="w-4 h-4" />
+          Copy
+        </button>
+        <button
+          disabled={!canPaste}
+          onClick={() => {
+            onPaste();
+          }}
+          className="w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 disabled:text-gray-300 disabled:hover:bg-transparent transition-colors flex items-center gap-3"
+        >
+          <ClipboardPaste className="w-4 h-4" />
+          Paste
+        </button>
+        <button
+          onClick={onSelectAll}
+          className="w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+        >
+          <CheckSquare2 className="w-4 h-4" />
+          {selectAllLabel}
+        </button>
+        <div className="border-t border-gray-100 my-1" />
+        <button
+          onClick={() => {
+            onUndo();
+          }}
+          className="w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Undo
+        </button>
+        <button
+          onClick={() => {
+            onRedo();
+          }}
+          className="w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+        >
+          <RotateCw className="w-4 h-4" />
+          Redo
+        </button>
+      </div>
+    </div>
+  );
+};
 
 interface EditorToolbarProps {
   onSave: () => void;
@@ -52,6 +133,15 @@ export const EditorToolbar = ({
     clipboardItems,
     setClipboardItems,
   } = useEditorSelection();
+
+  const allSelectableIds = React.useMemo(
+    () => Object.keys(query.getNodes()).filter((id) => id !== "ROOT"),
+    [query, selectedIds.length],
+  );
+
+  const isAllSelected =
+    allSelectableIds.length > 0 &&
+    selectedIds.length === allSelectableIds.length;
 
   const getPrimarySelection = React.useCallback(() => {
     if (selectedIds.length > 0) {
@@ -125,9 +215,13 @@ export const EditorToolbar = ({
   }, [actions, clipboardItems, getPrimarySelection, query]);
 
   const handleSelectAll = React.useCallback(() => {
-    const allIds = Object.keys(query.getNodes()).filter((id) => id !== "ROOT");
-    setSelectedIds(allIds);
-  }, [query, setSelectedIds]);
+    if (isAllSelected) {
+      clearSelection();
+      return;
+    }
+
+    setSelectedIds(allSelectableIds);
+  }, [allSelectableIds, clearSelection, isAllSelected, setSelectedIds]);
 
   const handleDeleteSelection = React.useCallback(() => {
     const idsToDelete =
@@ -224,171 +318,115 @@ export const EditorToolbar = ({
     selectedIds.length > 0 || (selectedNodeId && selectedNodeId !== "ROOT");
 
   return (
-    <div className="flex items-center justify-between bg-white border-b border-gray-100 px-8 h-20 sticky top-0 z-50 shadow-xs">
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-3 pr-6 border-r border-gray-100">
-          <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-            <Bot className="w-5 h-5" />
+    <nav className="flex items-center justify-between bg-white border-b border-gray-200 px-8 h-16 sticky top-0 z-50">
+      {/* Left: Branding */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-linear-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center text-white shadow-sm">
+            <Bot className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xs font-black text-gray-900 uppercase tracking-widest leading-none mb-1">
-              Visual Editor
-            </h2>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none">
-              Global Architecture
-            </p>
+            <h1 className="text-sm font-bold text-gray-900">Visual Editor</h1>
+            <p className="text-xs text-gray-500">Global Architecture</p>
           </div>
-        </div>
-
-        <div className="flex items-center bg-gray-50 rounded-xl p-1.5 border border-gray-100">
-          <button
-            onClick={() =>
-              actions.setOptions((options) => {
-                options.enabled = true;
-              })
-            }
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
-              enabled
-                ? "bg-white shadow-sm text-blue-600 ring-1 ring-gray-100"
-                : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            Build
-          </button>
-          <button
-            onClick={() =>
-              actions.setOptions((options) => {
-                options.enabled = false;
-              })
-            }
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
-              !enabled
-                ? "bg-white shadow-sm text-blue-600 ring-1 ring-gray-100"
-                : "text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            Preview
-          </button>
-        </div>
-
-        <div className="pl-6 border-l border-gray-100">
-          <APIHealthIndicator />
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <Link
-          href="/dashboard"
-          className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-all flex items-center gap-2 border border-gray-100 bg-gray-50 hover:bg-gray-100"
+      {/* Center: Build/Preview Toggle */}
+      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+        <button
+          onClick={() =>
+            actions.setOptions((options) => {
+              options.enabled = true;
+            })
+          }
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${
+            enabled
+              ? "bg-white text-blue-600 shadow-sm"
+              : "text-gray-600 hover:text-gray-900"
+          }`}
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Dashboard
-        </Link>
+          <Edit3 className="w-4 h-4" />
+          Build
+        </button>
+        <button
+          onClick={() =>
+            actions.setOptions((options) => {
+              options.enabled = false;
+            })
+          }
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 ${
+            !enabled
+              ? "bg-white text-blue-600 shadow-sm"
+              : "text-gray-600 hover:text-gray-900"
+          }`}
+        >
+          <Eye className="w-4 h-4" />
+          Preview
+        </button>
+      </div>
 
-        {onAIGenerate && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onAIGenerate}
-            disabled={isGenerating}
-            className="h-10 px-4 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-100 font-black uppercase tracking-widest text-[10px] flex items-center gap-2 transition-all hover:-translate-y-0.5"
-          >
-            <Sparkles className="w-4 h-4" />
-            {isGenerating ? "Building..." : "AI Full Build"}
-          </Button>
-        )}
+      {/* Right: Actions */}
+      <div className="flex items-center gap-3">
+        {/* Health Indicator */}
+        <APIHealthIndicator />
 
+        {/* Live View */}
         {slug && (
           <a
             href={`/${slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600 transition-all flex items-center gap-2 border border-transparent hover:border-gray-100 hover:bg-gray-50 mr-4"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200"
           >
-            <Globe className="w-3.5 h-3.5" />
+            <Globe className="w-4 h-4" />
             Live View
           </a>
         )}
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleCopy}
-            disabled={selectedIds.length === 0}
-            className="h-10 px-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-600 hover:bg-gray-100 transition-all flex items-center gap-2 disabled:opacity-40"
-          >
-            <Clipboard className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Copy
-            </span>
-          </Button>
+        {/* Tools Dropdown */}
+        <ToolsDropdown
+          onCopy={handleCopy}
+          onPaste={handlePaste}
+          onSelectAll={handleSelectAll}
+          onUndo={() => actions.history.undo()}
+          onRedo={() => actions.history.redo()}
+          canCopy={selectedIds.length > 0}
+          canPaste={clipboardItems.length > 0}
+          selectAllLabel={isAllSelected ? "Unselect All" : "Select All"}
+        />
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handlePaste}
-            disabled={clipboardItems.length === 0}
-            className="h-10 px-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-600 hover:bg-gray-100 transition-all flex items-center gap-2 disabled:opacity-40"
+        {/* AI Full Build */}
+        {onAIGenerate && (
+          <button
+            onClick={onAIGenerate}
+            disabled={isGenerating}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-200 text-sm font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-sm"
           >
-            <ClipboardPaste className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Paste
-            </span>
-          </Button>
+            <Sparkles className="w-4 h-4" />
+            {isGenerating ? "Generating..." : "AI Build"}
+          </button>
+        )}
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleSelectAll}
-            className="h-10 px-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-600 hover:bg-gray-100 transition-all flex items-center gap-2"
-          >
-            <CheckSquare2 className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Select All
-            </span>
-          </Button>
+        {/* Save Button - Primary CTA */}
+        <button
+          onClick={onSave}
+          disabled={isSaving}
+          className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Save className="w-4 h-4" />
+          {isSaving ? "Saving..." : "Save"}
+        </button>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => actions.history.undo()}
-            className="h-10 px-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-600 hover:bg-gray-100 transition-all flex items-center gap-2"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Undo
-            </span>
-          </Button>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => actions.history.redo()}
-            className="h-10 px-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-600 hover:bg-gray-100 transition-all flex items-center gap-2"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Redo
-            </span>
-          </Button>
-
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onSave}
-            disabled={isSaving}
-            className="h-10 px-6 rounded-xl bg-gray-900 hover:bg-black text-white font-bold flex items-center gap-2 shadow-lg shadow-gray-100 transition-all hover:-translate-y-0.5"
-          >
-            <Save className="w-4 h-4" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              {isSaving ? "Synching..." : "Push Updates"}
-            </span>
-          </Button>
-        </div>
+        {/* Exit Editor */}
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 border border-gray-200"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Exit
+        </Link>
       </div>
-    </div>
+    </nav>
   );
 };
