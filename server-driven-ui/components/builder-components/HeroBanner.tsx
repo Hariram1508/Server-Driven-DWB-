@@ -2,7 +2,7 @@
 /* eslint-disable */
 
 import React from "react";
-import { Element, useNode } from "@craftjs/core";
+import { useNode } from "@craftjs/core";
 
 interface HeroHeadingProps {
   text?: string;
@@ -1198,9 +1198,6 @@ export const HeroBanner = ({
   } = useNode((node) => ({ id: node.id }));
 
   const heroClass = `sdui-hero-${id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const headingId = `${id}-heading`;
-  const subheadingId = `${id}-subheading`;
-  const ctaId = `${id}-cta`;
   const padding = `${paddingTop} ${paddingRight} ${paddingBottom} ${paddingLeft}`;
   const margin = `${marginTop} ${marginRight} ${marginBottom} ${marginLeft}`;
   const isAbsolute = positionMode === "absolute";
@@ -1221,6 +1218,37 @@ export const HeroBanner = ({
           top: ${isAbsolute ? y : "auto"};
           z-index: ${Number.isNaN(parsedZIndex) ? 1 : parsedZIndex};
         }
+        .${heroClass} .sdui-hero-title {
+          color: ${color};
+          font-size: 56px;
+          font-weight: 800;
+          line-height: 1.1;
+          margin: 0 0 16px 0;
+          max-width: 100%;
+          text-align: center;
+        }
+        .${heroClass} .sdui-hero-subtitle {
+          color: ${color};
+          font-size: 20px;
+          line-height: 1.6;
+          margin: 0 0 24px 0;
+          max-width: 100%;
+          text-align: center;
+        }
+        .${heroClass} .sdui-hero-cta {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #2563eb;
+          color: #ffffff;
+          border-radius: 8px;
+          padding: 12px 24px;
+          text-decoration: none;
+          transition: all 0.2s ease-in-out;
+        }
+        .${heroClass} .sdui-hero-cta:hover {
+          opacity: 0.9;
+        }
       `}</style>
       <div
         ref={(ref: HTMLDivElement | null) => {
@@ -1232,25 +1260,16 @@ export const HeroBanner = ({
           <div className="absolute inset-0 bg-black opacity-40" />
         )}
         <div className="relative z-10 flex min-h-[inherit] flex-col items-center justify-center px-4 text-center">
-          <Element
-            id={headingId}
-            is={HeroHeading}
-            text={heading}
-            color={color}
-          />
-          <Element
-            id={subheadingId}
-            is={HeroSubheading}
-            text={subheading}
-            color={color}
-          />
-          <Element
-            id={ctaId}
-            is={HeroCTAButton}
-            text={ctaText}
+          <h1 className="sdui-hero-title">{heading}</h1>
+          <p className="sdui-hero-subtitle">{subheading}</p>
+          <a
             href={ctaLink}
             target={ctaTarget}
-          />
+            rel={ctaTarget === "_blank" ? "noopener noreferrer" : undefined}
+            className="sdui-hero-cta"
+          >
+            {ctaText}
+          </a>
         </div>
       </div>
     </>
