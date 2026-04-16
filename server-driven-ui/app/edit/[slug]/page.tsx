@@ -20,9 +20,10 @@ import {
   LayoutTemplate,
   ArrowRight,
 } from "lucide-react";
-import { EditorToolbar } from "@/components/editor/EditorToolbar";
+import { EditorToolbar } from "../../../components/editor/EditorToolbar";
 import { ComponentLibrary } from "@/components/editor/ComponentLibrary";
 import { PropertyPanel } from "@/components/editor/PropertyPanel";
+import { EditorSelectionProvider } from "@/components/editor/EditorSelectionContext";
 import { ComponentMapper } from "@/components/renderer/ComponentMapper";
 import * as pagesApi from "@/lib/api/pages.api";
 import { useAuth } from "@/lib/context/AuthContext";
@@ -977,19 +978,21 @@ export default function EditPage({ params }: PageProps) {
 
   return (
     <Editor resolver={ComponentMapper} onRender={RenderNode}>
-      <React.Suspense fallback={<div>Loading...</div>}>
-        {pageData && (
-          <EditorWrapper
-            pageData={pageData}
-            onSave={handleSave}
-            saving={saving}
-            slug={slug}
-            onUpdatePageData={setPageData}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-          />
-        )}
-      </React.Suspense>
+      <EditorSelectionProvider>
+        <React.Suspense fallback={<div>Loading...</div>}>
+          {pageData && (
+            <EditorWrapper
+              pageData={pageData}
+              onSave={handleSave}
+              saving={saving}
+              slug={slug}
+              onUpdatePageData={setPageData}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+            />
+          )}
+        </React.Suspense>
+      </EditorSelectionProvider>
     </Editor>
   );
 }

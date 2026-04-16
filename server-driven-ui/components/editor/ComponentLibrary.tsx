@@ -13,6 +13,9 @@ import {
   HelpCircle,
   Mail,
   MousePointer2,
+  Search,
+  Layers,
+  Video as VideoIcon,
 } from "lucide-react";
 import { HeroBanner } from "../builder-components/HeroBanner";
 import { TextBlock } from "../builder-components/TextBlock";
@@ -25,6 +28,14 @@ import { ContactForm } from "../builder-components/ContactForm";
 import { Button } from "../builder-components/Button";
 import { ActionButton } from "../builder-components/ActionButton";
 import { RawHTML } from "../builder-components/RawHTML";
+import { Section } from "../builder-components/Section";
+import { Grid } from "../builder-components/Grid";
+import { Image } from "../builder-components/Image";
+import { Video } from "../builder-components/Video";
+import { Heading } from "../builder-components/Heading";
+import { Card } from "../builder-components/Card";
+import { Spacer } from "../builder-components/Spacer";
+import { Paragraph } from "../builder-components/Paragraph";
 import { ComponentMapper } from "../renderer/ComponentMapper";
 import * as aiApi from "@/lib/api/ai.api";
 import { Sparkles, Code } from "lucide-react";
@@ -38,6 +49,7 @@ type CustomComponentItem = {
 
 export const ComponentLibrary = () => {
   const { connectors } = useEditor();
+  const [search, setSearch] = React.useState("");
   const [customComponents, setCustomComponents] = React.useState<
     CustomComponentItem[]
   >([]);
@@ -64,18 +76,40 @@ export const ComponentLibrary = () => {
 
   const components = [
     {
+      category: "Layout",
       name: "Hero Banner",
       icon: <ImageIcon className="w-5 h-5 text-purple-500" />,
       component: <HeroBanner />,
       description: "Main landing section with title and background.",
     },
     {
-      name: "Text Block",
-      icon: <Type className="w-5 h-5 text-blue-500" />,
-      component: <TextBlock />,
-      description: "Simple text section with title and description.",
+      category: "Layout",
+      name: "Section",
+      icon: <Layers className="w-5 h-5 text-slate-500" />,
+      component: (
+        <Element is={Section} canvas>
+          <div className="p-10 text-center text-gray-400 border border-dashed rounded-xl italic">
+            Drop components here
+          </div>
+        </Element>
+      ),
+      description: "Flexible full-width section for grouped content.",
     },
     {
+      category: "Layout",
+      name: "Grid",
+      icon: <Layout className="w-5 h-5 text-blue-500" />,
+      component: (
+        <Element is={Grid} canvas>
+          <div className="p-6 text-center text-gray-400 border border-dashed rounded-xl italic">
+            Drop components here
+          </div>
+        </Element>
+      ),
+      description: "Responsive grid layout for two or more columns.",
+    },
+    {
+      category: "Layout",
       name: "Container",
       icon: <Box className="w-5 h-5 text-green-500" />,
       component: (
@@ -88,42 +122,104 @@ export const ComponentLibrary = () => {
       description: "A layout container to hold other components.",
     },
     {
+      category: "Layout",
+      name: "Card",
+      icon: <Box className="w-5 h-5 text-sky-500" />,
+      component: (
+        <Element is={Card} canvas>
+          <div className="p-6 text-center text-gray-400 border border-dashed rounded italic text-sm">
+            Card content
+          </div>
+        </Element>
+      ),
+      description: "A styled card container with padding and shadow.",
+    },
+    {
+      category: "Layout",
+      name: "Spacer",
+      icon: <Layout className="w-5 h-5 text-gray-500" />,
+      component: <Spacer />,
+      description: "Add vertical or horizontal spacing between components.",
+    },
+    {
+      category: "Content",
+      name: "Heading",
+      icon: <Type className="w-5 h-5 text-teal-500" />,
+      component: <Heading />,
+      description: "Customizable heading from H1 to H6.",
+    },
+    {
+      category: "Content",
+      name: "Paragraph",
+      icon: <Type className="w-5 h-5 text-cyan-500" />,
+      component: <Paragraph />,
+      description: "Formatted paragraph text with styling options.",
+    },
+    {
+      category: "Content",
+      name: "Text Block",
+      icon: <Type className="w-5 h-5 text-blue-500" />,
+      component: <TextBlock />,
+      description: "Simple text section with title and description.",
+    },
+    {
+      category: "Content",
+      name: "Image",
+      icon: <ImageIcon className="w-5 h-5 text-rose-500" />,
+      component: <Image alt="Image component preview" />,
+      description: "Responsive image with caption support.",
+    },
+    {
+      category: "Content",
+      name: "Video",
+      icon: <VideoIcon className="w-5 h-5 text-red-500" />,
+      component: <Video />,
+      description: "Embed YouTube or Vimeo content.",
+    },
+    {
+      category: "Institution",
       name: "About Section",
       icon: <Info className="w-5 h-5 text-orange-500" />,
       component: <AboutSection />,
       description: "About us section with image and text.",
     },
     {
+      category: "Institution",
       name: "Statistics",
       icon: <Layout className="w-5 h-5 text-indigo-500" />,
       component: <Statistics />,
       description: "Display institution numbers and achievements.",
     },
     {
+      category: "Institution",
       name: "Faculty Grid",
       icon: <Users className="w-5 h-5 text-rose-500" />,
       component: <FacultyGrid />,
       description: "Display faculty members in a grid.",
     },
     {
+      category: "Interactive",
       name: "FAQ Accordion",
       icon: <HelpCircle className="w-5 h-5 text-amber-500" />,
       component: <FAQAccordion />,
       description: "Expandable list of questions and answers.",
     },
     {
+      category: "Forms",
       name: "Contact Form",
       icon: <Mail className="w-5 h-5 text-cyan-500" />,
       component: <ContactForm />,
       description: "Contact section with details and a form.",
     },
     {
+      category: "Actions",
       name: "Button",
       icon: <MousePointer2 className="w-5 h-5 text-indigo-500" />,
       component: <Button />,
       description: "A customizable call-to-action button.",
     },
     {
+      category: "Actions",
       name: "Action Button",
       icon: <MousePointer2 className="w-5 h-5 text-violet-500" />,
       component: <ActionButton />,
@@ -131,6 +227,7 @@ export const ComponentLibrary = () => {
         "Advanced button with solid/outline variants and positioning.",
     },
     {
+      category: "Advanced",
       name: "Custom HTML",
       icon: <Code className="w-5 h-5 text-emerald-500" />,
       component: <RawHTML />,
@@ -138,37 +235,89 @@ export const ComponentLibrary = () => {
     },
   ];
 
+  const filteredComponents = components.filter((item) => {
+    const haystack =
+      `${item.category} ${item.name} ${item.description}`.toLowerCase();
+    return haystack.includes(search.trim().toLowerCase());
+  });
+
+  const groupedComponents = filteredComponents.reduce<
+    Record<string, typeof components>
+  >((groups, item) => {
+    if (!groups[item.category]) {
+      groups[item.category] = [];
+    }
+    groups[item.category].push(item);
+    return groups;
+  }, {});
+
   return (
     <div className="w-72 border-r bg-white h-full shrink-0 overflow-y-auto p-4 scrollbar-hide">
-      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-        <Layout className="w-3.5 h-3.5" />
-        Components
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+          <Layout className="w-3.5 h-3.5" />
+          Components
+        </h3>
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+          {filteredComponents.length} items
+        </span>
+      </div>
 
-      <div className="space-y-3">
-        {components.map((item, index) => (
-          <div
-            key={index}
-            ref={(ref: HTMLDivElement | null) => {
-              if (ref) {
-                connectors.create(ref, item.component);
-              }
-            }}
-            className="group p-3 border rounded-xl hover:border-blue-300 hover:bg-blue-50 cursor-grab transition active:cursor-grabbing shadow-sm"
-          >
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-white transition">
-                {item.icon}
-              </div>
-              <span className="text-sm font-semibold text-gray-700">
-                {item.name}
+      <div className="relative mb-4">
+        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search components"
+          className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+        />
+      </div>
+
+      <div className="space-y-5">
+        {Object.entries(groupedComponents).map(([category, items]) => (
+          <div key={category} className="space-y-3">
+            <div className="flex items-center gap-2 sticky top-0 bg-white py-1">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                {category}
               </span>
+              <span className="h-px flex-1 bg-gray-100" />
             </div>
-            <p className="text-[11px] text-gray-500 leading-relaxed px-1">
-              {item.description}
-            </p>
+            {items.map((item, index) => (
+              <div
+                key={`${category}-${index}`}
+                ref={(ref: HTMLDivElement | null) => {
+                  if (ref) {
+                    connectors.create(ref, item.component);
+                  }
+                }}
+                className="group p-3 border rounded-xl hover:border-blue-300 hover:bg-blue-50 cursor-grab transition active:cursor-grabbing shadow-sm"
+              >
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-white transition">
+                    {item.icon}
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">
+                    {item.name}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 leading-relaxed px-1">
+                  {item.description}
+                </p>
+              </div>
+            ))}
           </div>
         ))}
+
+        {filteredComponents.length === 0 && (
+          <div className="py-12 text-center border border-dashed rounded-2xl bg-gray-50">
+            <p className="text-sm font-semibold text-gray-600">
+              No components found
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Try a different search term.
+            </p>
+          </div>
+        )}
 
         {customComponents.length > 0 && (
           <>
