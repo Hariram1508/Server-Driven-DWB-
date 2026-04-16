@@ -96,6 +96,23 @@ export const ActionButton = ({
   `}</style>
   );
 
+  const normalizeHref = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+
+    const isAbsoluteOrSpecial = /^(https?:\/\/|mailto:|tel:|#|\/)/i.test(
+      trimmed,
+    );
+    if (isAbsoluteOrSpecial) {
+      return trimmed;
+    }
+
+    const withoutRelativeDots = trimmed.replace(/^(\.\.\/|\.\/)+/, "");
+    return `/${withoutRelativeDots}`;
+  };
+
+  const resolvedHref = normalizeHref(href);
+
   const buttonElement = (
     <>
       {scopedStyle}
@@ -110,12 +127,12 @@ export const ActionButton = ({
     </>
   );
 
-  if (href) {
+  if (resolvedHref) {
     return (
       <>
         {scopedStyle}
         <a
-          href={href}
+          href={resolvedHref}
           target={target}
           rel={target === "_blank" ? "noopener noreferrer" : undefined}
           className={`${actionButtonClass} no-underline inline-block`}

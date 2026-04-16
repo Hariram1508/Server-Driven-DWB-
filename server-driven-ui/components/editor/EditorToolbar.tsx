@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useEditor } from "@craftjs/core";
 import {
   Save,
@@ -11,6 +12,7 @@ import {
   Edit3,
   Globe,
   Sparkles,
+  ArrowLeft,
 } from "lucide-react";
 import Button from "../ui/Button";
 import { APIHealthIndicator } from "./APIHealthIndicator";
@@ -87,6 +89,14 @@ export const EditorToolbar = ({
       </div>
 
       <div className="flex items-center gap-4">
+        <Link
+          href="/dashboard"
+          className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-all flex items-center gap-2 border border-gray-100 bg-gray-50 hover:bg-gray-100"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Dashboard
+        </Link>
+
         {onAIGenerate && (
           <Button
             variant="ghost"

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState, useRef, use, useMemo } from "react";
+import React, { useEffect, useState, useRef, use, useCallback } from "react";
 import { Editor, Frame, Element, useEditor } from "@craftjs/core";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   Sparkles,
   Monitor,
@@ -37,6 +38,13 @@ import { Page, PageJSON } from "@/lib/types/page.types";
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
+
+const normalizeSlug = (value: string): string =>
+  decodeURIComponent(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
 type SerializedEditorQuery = { serialize: () => string };
@@ -176,6 +184,13 @@ const FullPagePreview = ({
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 ml-4">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 hover:text-white transition-all"
+          >
+            <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+            Dashboard
+          </Link>
           <button
             onClick={onModify}
             className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 transition-all hover:scale-105"
@@ -465,24 +480,77 @@ const EditorWrapper = ({
   viewMode: "visual" | "code";
   setViewMode: (mode: "visual" | "code") => void;
 }) => {
-  const { query } = useEditor();
+  const { query, nodes } = useEditor((state) => ({
+    nodes: state.nodes,
+  }));
   const searchParams = useSearchParams();
   const [isGenerating, setIsGenerating] = useState(false);
   const [genStatus, setGenStatus] = useState("");
   const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [serializedQuery, setSerializedQuery] = useState("");
   const lastAutoSaveRef = useRef<string>("");
   const autoSaveTimerRef = useRef<number | null>(null);
+  const latestSerializedQueryRef = useRef<string>("");
+  const latestPageDataRef = useRef<EditorPageData | null>(pageData);
+  const isFlushingRef = useRef(false);
   const [modalConfig, setModalConfig] = useState<{
     open: boolean;
     isEdit: boolean;
   }>({ open: false, isEdit: false });
-  const serializedQuery = useMemo(() => {
+
+  useEffect(() => {
     try {
-      return query.serialize();
+      setSerializedQuery(query.serialize());
     } catch {
-      return "";
+      setSerializedQuery("");
     }
-  }, [query]);
+  }, [query, nodes]);
+
+  useEffect(() => {
+    latestSerializedQueryRef.current = serializedQuery;
+    latestPageDataRef.current = pageData;
+  }, [serializedQuery, pageData]);
+
+  const flushAutoSave = useCallback(() => {
+    if (isFlushingRef.current) {
+      return;
+    }
+
+    const latestPage = latestPageDataRef.current;
+    const latestSerialized = latestSerializedQueryRef.current;
+
+    if (!latestPage?._id || !canAutoSavePage(latestPage)) {
+      return;
+    }
+
+    if (!latestSerialized || latestSerialized === lastAutoSaveRef.current) {
+      return;
+    }
+
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(latestSerialized);
+    } catch {
+      return;
+    }
+
+    isFlushingRef.current = true;
+    void pagesApi
+      .updatePage(latestPage._id, {
+        jsonConfig: parsedJson as PageJSON,
+        htmlContent: latestPage.htmlContent,
+        useHtml: latestPage.useHtml,
+      })
+      .then(() => {
+        lastAutoSaveRef.current = latestSerialized;
+      })
+      .catch((error) => {
+        console.error("Auto-save flush failed:", error);
+      })
+      .finally(() => {
+        isFlushingRef.current = false;
+      });
+  }, []);
 
   // Initial AI check
   useEffect(() => {
@@ -610,18 +678,7 @@ const EditorWrapper = ({
     }
 
     autoSaveTimerRef.current = window.setTimeout(() => {
-      pagesApi
-        .updatePage(pageData._id, {
-          jsonConfig: JSON.parse(serializedQuery),
-          htmlContent: pageData.htmlContent,
-          useHtml: pageData.useHtml,
-        })
-        .then(() => {
-          lastAutoSaveRef.current = serializedQuery;
-        })
-        .catch((error) => {
-          console.error("Auto-save failed:", error);
-        });
+      flushAutoSave();
     }, 1200);
 
     return () => {
@@ -629,7 +686,23 @@ const EditorWrapper = ({
         window.clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [serializedQuery, pageData]);
+  }, [serializedQuery, pageData, flushAutoSave]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      flushAutoSave();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+      flushAutoSave();
+    };
+  }, [flushAutoSave]);
 
   const handleSwitchToBlocks = () => {
     onUpdatePageData({ ...pageData, useHtml: false });
@@ -777,17 +850,57 @@ export default function EditPage({ params }: PageProps) {
 
     const fetchPage = async () => {
       try {
-        const data = await pagesApi.getPageBySlug(
-          slug,
-          (user?.institutionId as string) || "",
+        const requestedSlug = normalizeSlug(slug);
+
+        let data: EditorPageData;
+
+        try {
+          data = await pagesApi.getPageBySlug(
+            requestedSlug,
+            (user?.institutionId as string) || "",
+          );
+        } catch (error: any) {
+          if (error?.response?.status !== 404) {
+            throw error;
+          }
+
+          const allPages = await pagesApi.getAllPages();
+          const matchedPage = allPages.find(
+            (page) => normalizeSlug(page.slug) === requestedSlug,
+          );
+
+          if (!matchedPage) {
+            throw error;
+          }
+
+          data = matchedPage;
+        }
+
+        const craftConfig = toCraftConfig(data.jsonConfig);
+        const rootNode = craftConfig.ROOT as
+          | { nodes?: unknown[]; linkedNodes?: Record<string, unknown> }
+          | undefined;
+        const hasCraftRoot = Boolean(rootNode);
+        const hasRootChildren = Boolean(
+          rootNode &&
+          ((Array.isArray(rootNode.nodes) && rootNode.nodes.length > 0) ||
+            (rootNode.linkedNodes &&
+              Object.keys(rootNode.linkedNodes).length > 0)),
         );
+        const canHydrateFromHtml =
+          Boolean(data.htmlContent) &&
+          (Boolean(data.useHtml) || !hasCraftRoot || !hasRootChildren);
+
         setPageData(
-          data.useHtml && data.htmlContent
+          canHydrateFromHtml
             ? {
                 ...data,
                 useHtml: false,
                 jsonConfig: toPageJson(
-                  createHtmlCraftConfig(data.htmlContent, data.jsonConfig),
+                  createHtmlCraftConfig(
+                    data.htmlContent as string,
+                    data.jsonConfig,
+                  ),
                 ),
               }
             : data,

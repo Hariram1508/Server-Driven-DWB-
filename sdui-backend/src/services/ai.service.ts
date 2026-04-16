@@ -3,7 +3,11 @@ import OpenAI from "openai";
 import env from "../config/env";
 import { AppError } from "../middleware/error.middleware";
 import { PageJSON } from "../types/page.types";
-import { getTemplate, suggestTemplate } from "../templates/site-templates";
+import {
+  getTemplate,
+  suggestTemplate,
+  TemplateType,
+} from "../templates/site-templates";
 
 export class AIService {
   private anthropic: Anthropic | null = null;
@@ -28,6 +32,51 @@ export class AIService {
         "⚠️ No AI API keys configured. AI features will be disabled.",
       );
     }
+  }
+
+  private normalizeTemplateType(
+    templateType: unknown,
+    nameHint: string = "",
+    purposeHint: string = "",
+  ): TemplateType {
+    const raw =
+      typeof templateType === "string" ? templateType.trim().toLowerCase() : "";
+
+    const legacyMap: Record<string, TemplateType> = {
+      "hero-dark": "college-home",
+      "product-grid": "college-programs",
+      "about-editorial": "college-about",
+      "contact-split": "college-contact",
+      "blog-magazine": "college-events",
+      "services-dark": "college-campus",
+      "pricing-tiers": "college-admissions",
+      "team-profiles": "college-faculty",
+      "product-showcase": "college-gallery",
+      "minimal-content": "college-about",
+    };
+
+    if (legacyMap[raw]) {
+      return legacyMap[raw];
+    }
+
+    const validTemplates: TemplateType[] = [
+      "college-home",
+      "college-admissions",
+      "college-programs",
+      "college-faculty",
+      "college-about",
+      "college-campus",
+      "college-events",
+      "college-contact",
+      "college-placements",
+      "college-gallery",
+    ];
+
+    if (validTemplates.includes(raw as TemplateType)) {
+      return raw as TemplateType;
+    }
+
+    return suggestTemplate(nameHint, purposeHint);
   }
 
   private async getChatCompletion(
@@ -423,18 +472,21 @@ RULES:
 - Return 3 to 7 pages. Always include a home page as the FIRST item.
 - Slugs must be lowercase, URL-safe, hyphens only (no spaces, no slashes).
 - "purpose" describes the exact content and sections on this page (2-3 sentences).
-- "templateType" must be ONE of: hero-dark, product-grid, about-editorial, contact-split, blog-magazine, services-dark, pricing-tiers, team-profiles, product-showcase, minimal-content
+- "templateType" must be ONE of:
+  college-home, college-admissions, college-programs, college-faculty,
+  college-about, college-campus, college-events, college-contact,
+  college-placements, college-gallery
   Choose the best-fitting template:
-  hero-dark → homepage, landing page
-  product-grid → product category, shop, listing, collection (men/women/shoes/shirts)
-  about-editorial → about, story, mission, history
-  contact-split → contact, reach us, support
-  blog-magazine → blog, news, articles
-  services-dark → services, solutions, capabilities
-  pricing-tiers → pricing, plans, subscription
-  team-profiles → team, faculty, staff, people
-  product-showcase → featured product, portfolio, gallery
-  minimal-content → simple info page, legal, misc
+  college-home → homepage, landing page
+  college-admissions → admissions, apply, enroll
+  college-programs → programs, courses, departments
+  college-faculty → faculty, team, staff profiles
+  college-about → about, mission, history
+  college-campus → campus life, facilities, clubs
+  college-events → events, news, announcements
+  college-contact → contact, reach us, support
+  college-placements → placements, careers, recruiters
+  college-gallery → gallery, media, photos
 
 Respond with ONLY a JSON object (no markdown):
 {
@@ -488,8 +540,11 @@ Respond with ONLY a JSON object (no markdown):
           .replace(/-+/g, "-")
           .replace(/^-|-$/g, ""),
         purpose: p.purpose,
-        templateType:
-          (p as any).templateType ?? suggestTemplate(p.name, p.purpose),
+        templateType: this.normalizeTemplateType(
+          (p as any).templateType,
+          p.name,
+          p.purpose,
+        ),
       }));
 
       return { success: true, pages: sanitized };
@@ -614,8 +669,11 @@ Respond with ONLY a JSON object (no markdown):
       const year = new Date().getFullYear();
 
       // Pick template
-      const templateType =
-        context.templateType ?? suggestTemplate(currentSlug ?? "", prompt);
+      const templateType = this.normalizeTemplateType(
+        context.templateType,
+        currentSlug ?? "",
+        prompt,
+      );
       const templateHtml = getTemplate(templateType);
 
       // Build nav links — white-on-dark style matching SHARED_NAV (dark blue navbar)

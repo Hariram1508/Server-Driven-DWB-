@@ -43,6 +43,8 @@ export interface CreatePageData {
 }
 
 export interface UpdatePageData {
+  name?: string;
+  slug?: string;
   jsonConfig?: PageJSON;
   htmlContent?: string;
   useHtml?: boolean;

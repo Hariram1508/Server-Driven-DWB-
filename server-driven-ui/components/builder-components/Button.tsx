@@ -93,6 +93,23 @@ export const Button = ({
 
   const className = `${buttonClass} inline-block font-semibold transition-all duration-200 ${getVariantStyles()} ${getSizeStyles()}`;
 
+  const normalizeHref = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+
+    const isAbsoluteOrSpecial = /^(https?:\/\/|mailto:|tel:|#|\/)/i.test(
+      trimmed,
+    );
+    if (isAbsoluteOrSpecial) {
+      return trimmed;
+    }
+
+    const withoutRelativeDots = trimmed.replace(/^(\.\.\/|\.\/)+/, "");
+    return `/${withoutRelativeDots}`;
+  };
+
+  const resolvedHref = normalizeHref(href);
+
   const customCss =
     variant === "outline"
       ? `
@@ -128,7 +145,7 @@ export const Button = ({
     `}</style>
   );
 
-  if (href) {
+  if (resolvedHref) {
     return (
       <>
         {scopedStyle}
@@ -136,7 +153,7 @@ export const Button = ({
           ref={(ref: HTMLAnchorElement | null) => {
             if (ref) connect(drag(ref));
           }}
-          href={href}
+          href={resolvedHref}
           target={target}
           rel={target === "_blank" ? "noopener noreferrer" : undefined}
           className={className}

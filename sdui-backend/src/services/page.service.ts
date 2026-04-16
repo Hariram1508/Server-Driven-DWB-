@@ -1,23 +1,25 @@
-import { Page, IPage } from '../models/Page.model';
-import { Version } from '../models/Version.model';
-import { AppError } from '../middleware/error.middleware';
-import { PageJSON } from '../types/page.types';
+import { Page, IPage } from "../models/Page.model";
+import { Version } from "../models/Version.model";
+import { AppError } from "../middleware/error.middleware";
+import { PageJSON } from "../types/page.types";
 
 export class PageService {
   // Get all pages for an institution
   async getAllPages(institutionId: string): Promise<IPage[]> {
     return Page.find({ institutionId })
       .sort({ updatedAt: -1 })
-      .populate('updatedBy', 'name email');
+      .populate("updatedBy", "name email");
   }
 
   // Get page by ID
   async getPageById(pageId: string, institutionId: string): Promise<IPage> {
-    const page = await Page.findOne({ _id: pageId, institutionId })
-      .populate('updatedBy', 'name email');
+    const page = await Page.findOne({ _id: pageId, institutionId }).populate(
+      "updatedBy",
+      "name email",
+    );
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     return page;
@@ -28,7 +30,7 @@ export class PageService {
     const page = await Page.findOne({ slug, institutionId });
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     return page;
@@ -49,7 +51,11 @@ export class PageService {
     });
 
     if (existingPage) {
-      throw new AppError('Page with this slug already exists', 409, 'DUPLICATE_SLUG');
+      throw new AppError(
+        "Page with this slug already exists",
+        409,
+        "DUPLICATE_SLUG",
+      );
     }
 
     // Create page with default config
@@ -60,15 +66,15 @@ export class PageService {
       jsonConfig: {
         ROOT: {
           type: {
-            resolvedName: 'Container',
+            resolvedName: "Container",
           },
           isCanvas: true,
           props: {
-            backgroundColor: '#ffffff',
-            padding: '40px',
-            minHeight: '800px',
+            backgroundColor: "#ffffff",
+            padding: "40px",
+            minHeight: "800px",
           },
-          displayName: 'Container',
+          displayName: "Container",
           custom: {},
           hidden: false,
           nodes: [],
@@ -85,7 +91,7 @@ export class PageService {
       pageId: page._id,
       versionNumber: 1,
       jsonConfig: page.jsonConfig,
-      changes: 'Initial version',
+      changes: "Initial version",
       createdBy: data.userId,
     });
 
@@ -97,34 +103,61 @@ export class PageService {
     pageId: string,
     institutionId: string,
     userId: string,
-    data: { jsonConfig?: PageJSON; htmlContent?: string; useHtml?: boolean },
-    changes?: string
+    data: {
+      name?: string;
+      slug?: string;
+      jsonConfig?: PageJSON;
+      htmlContent?: string;
+      useHtml?: boolean;
+    },
+    changes?: string,
   ): Promise<IPage> {
     const page = await Page.findOne({ _id: pageId, institutionId });
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
+    }
+
+    if (data.slug && data.slug !== page.slug) {
+      const existingPage = await Page.findOne({
+        institutionId,
+        slug: data.slug,
+        _id: { $ne: pageId },
+      });
+
+      if (existingPage) {
+        throw new AppError(
+          "Page with this slug already exists",
+          409,
+          "DUPLICATE_SLUG",
+        );
+      }
     }
 
     // Update page
+    if (data.name !== undefined) page.name = data.name;
+    if (data.slug !== undefined) page.slug = data.slug;
     if (data.jsonConfig) page.jsonConfig = data.jsonConfig;
     if (data.htmlContent !== undefined) page.htmlContent = data.htmlContent;
     if (data.useHtml !== undefined) page.useHtml = data.useHtml;
-    
+
     page.updatedBy = userId as any;
     await page.save();
 
     // Create new version
-    const latestVersion = await Version.findOne({ pageId })
-      .sort({ versionNumber: -1 });
+    const latestVersion = await Version.findOne({ pageId }).sort({
+      versionNumber: -1,
+    });
 
-    const newVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+    const newVersionNumber = latestVersion
+      ? latestVersion.versionNumber + 1
+      : 1;
 
     await Version.create({
       pageId: page._id,
       versionNumber: newVersionNumber,
       jsonConfig: page.jsonConfig,
-      changes: changes || 'Updated page',
+      changes: changes || "Updated page",
       createdBy: userId,
     });
 
@@ -136,7 +169,7 @@ export class PageService {
     const page = await Page.findOne({ _id: pageId, institutionId });
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     page.isPublished = true;
@@ -150,7 +183,7 @@ export class PageService {
     const page = await Page.findOne({ _id: pageId, institutionId });
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     page.isPublished = false;
@@ -164,7 +197,7 @@ export class PageService {
     const page = await Page.findOne({ _id: pageId, institutionId });
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     // Delete all versions
@@ -180,12 +213,12 @@ export class PageService {
     institutionId: string,
     userId: string,
     newName: string,
-    newSlug: string
+    newSlug: string,
   ): Promise<IPage> {
     const originalPage = await Page.findOne({ _id: pageId, institutionId });
 
     if (!originalPage) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     // Check if new slug already exists
@@ -195,7 +228,11 @@ export class PageService {
     });
 
     if (existingPage) {
-      throw new AppError('Page with this slug already exists', 409, 'DUPLICATE_SLUG');
+      throw new AppError(
+        "Page with this slug already exists",
+        409,
+        "DUPLICATE_SLUG",
+      );
     }
 
     // Create duplicate
@@ -222,19 +259,27 @@ export class PageService {
 
   // Get published pages (public)
   async getPublishedPages(institutionId?: string): Promise<IPage[]> {
-    const query = institutionId ? { institutionId, isPublished: true } : { isPublished: true };
+    const query = institutionId
+      ? { institutionId, isPublished: true }
+      : { isPublished: true };
     return Page.find(query)
-      .select('name slug jsonConfig htmlContent useHtml institutionId')
+      .select("name slug jsonConfig htmlContent useHtml institutionId")
       .sort({ updatedAt: -1 });
   }
 
   // Get published page by slug (public)
-  async getPublishedPageBySlug(slug: string, institutionId: string): Promise<IPage> {
-    const page = await Page.findOne({ slug, institutionId, isPublished: true })
-      .select('name slug jsonConfig htmlContent useHtml');
+  async getPublishedPageBySlug(
+    slug: string,
+    institutionId: string,
+  ): Promise<IPage> {
+    const page = await Page.findOne({
+      slug,
+      institutionId,
+      isPublished: true,
+    }).select("name slug jsonConfig htmlContent useHtml");
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     return page;
@@ -242,11 +287,12 @@ export class PageService {
 
   // Get any published page by slug globally (cross-institution lookup)
   async getPageBySlugGlobal(slug: string): Promise<IPage> {
-    const page = await Page.findOne({ slug, isPublished: true })
-      .select('name slug jsonConfig htmlContent useHtml institutionId');
+    const page = await Page.findOne({ slug, isPublished: true }).select(
+      "name slug jsonConfig htmlContent useHtml institutionId",
+    );
 
     if (!page) {
-      throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
     return page;
