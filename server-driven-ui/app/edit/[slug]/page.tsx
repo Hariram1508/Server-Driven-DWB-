@@ -532,6 +532,7 @@ const EditorWrapper = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [genStatus, setGenStatus] = useState("");
   const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [editorViewport, setEditorViewport] = useState<DeviceMode>("desktop");
   const [serializedQuery, setSerializedQuery] = useState("");
   const lastAutoSaveRef = useRef<string>("");
   const autoSaveTimerRef = useRef<number | null>(null);
@@ -754,6 +755,13 @@ const EditorWrapper = ({
     setViewMode("visual");
   };
 
+  const editorCanvasClass =
+    editorViewport === "desktop"
+      ? "w-full max-w-5xl"
+      : editorViewport === "tablet"
+        ? "w-full max-w-[820px]"
+        : "w-full max-w-[430px]";
+
   return (
     <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
       {modalConfig.open && (
@@ -843,7 +851,43 @@ const EditorWrapper = ({
         <div className="flex flex-1 overflow-hidden h-full">
           {viewMode === "visual" && <ComponentLibrary />}
           <main className="flex-1 overflow-y-auto bg-gray-100 p-8 scrollbar-hide">
-            <div className="bg-white shadow-xl min-h-200 w-full max-w-5xl mx-auto rounded-lg overflow-hidden relative">
+            {viewMode === "visual" && (
+              <div className="max-w-5xl mx-auto mb-4 flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Responsive Canvas
+                </div>
+                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                  {(
+                    [
+                      { id: "desktop", Icon: Monitor, label: "Desktop" },
+                      { id: "tablet", Icon: Tablet, label: "Tablet" },
+                      { id: "mobile", Icon: Smartphone, label: "Mobile" },
+                    ] as {
+                      id: DeviceMode;
+                      Icon: React.ElementType;
+                      label: string;
+                    }[]
+                  ).map(({ id, Icon, label }) => (
+                    <button
+                      key={id}
+                      onClick={() => setEditorViewport(id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                        editorViewport === id
+                          ? "bg-white text-blue-600 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                      title={`Switch to ${label} viewport`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div
+              className={`bg-white shadow-xl min-h-200 ${editorCanvasClass} mx-auto rounded-lg overflow-hidden relative transition-all duration-300`}
+            >
               <Frame
                 data={
                   toCraftConfig(pageData?.jsonConfig)?.ROOT

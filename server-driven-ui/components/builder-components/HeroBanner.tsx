@@ -1145,6 +1145,25 @@ interface HeroBannerProps {
   heading?: string;
   subheading?: string;
   ctaText?: string;
+  headingColor?: string;
+  subheadingColor?: string;
+  contentAlign?: "left" | "center" | "right";
+  contentMaxWidth?: string;
+  headingFontSize?: string;
+  headingFontWeight?: string;
+  headingLineHeight?: string;
+  headingMarginBottom?: string;
+  subheadingFontSize?: string;
+  subheadingLineHeight?: string;
+  subheadingMarginBottom?: string;
+  ctaBackgroundColor?: string;
+  ctaTextColor?: string;
+  ctaBorderRadius?: string;
+  ctaPaddingTop?: string;
+  ctaPaddingRight?: string;
+  ctaPaddingBottom?: string;
+  ctaPaddingLeft?: string;
+  ctaFontWeight?: string;
   backgroundColor?: string;
   color?: string;
   backgroundImage?: string;
@@ -1171,6 +1190,25 @@ export const HeroBanner = ({
   heading = "Welcome to Our Institution",
   subheading = "Excellence in Education",
   ctaText = "Learn More",
+  headingColor = "",
+  subheadingColor = "",
+  contentAlign = "center",
+  contentMaxWidth = "900px",
+  headingFontSize = "56px",
+  headingFontWeight = "800",
+  headingLineHeight = "1.1",
+  headingMarginBottom = "16px",
+  subheadingFontSize = "20px",
+  subheadingLineHeight = "1.6",
+  subheadingMarginBottom = "24px",
+  ctaBackgroundColor = "#2563eb",
+  ctaTextColor = "#ffffff",
+  ctaBorderRadius = "8px",
+  ctaPaddingTop = "12px",
+  ctaPaddingRight = "24px",
+  ctaPaddingBottom = "12px",
+  ctaPaddingLeft = "24px",
+  ctaFontWeight = "600",
   backgroundColor = "transparent",
   color = "#ffffff",
   backgroundImage = "",
@@ -1219,30 +1257,31 @@ export const HeroBanner = ({
           z-index: ${Number.isNaN(parsedZIndex) ? 1 : parsedZIndex};
         }
         .${heroClass} .sdui-hero-title {
-          color: ${color};
-          font-size: 56px;
-          font-weight: 800;
-          line-height: 1.1;
-          margin: 0 0 16px 0;
-          max-width: 100%;
-          text-align: center;
+          color: ${headingColor || color};
+          font-size: ${headingFontSize};
+          font-weight: ${headingFontWeight};
+          line-height: ${headingLineHeight};
+          margin: 0 0 ${headingMarginBottom} 0;
+          max-width: ${contentMaxWidth};
+          text-align: ${contentAlign};
         }
         .${heroClass} .sdui-hero-subtitle {
-          color: ${color};
-          font-size: 20px;
-          line-height: 1.6;
-          margin: 0 0 24px 0;
-          max-width: 100%;
-          text-align: center;
+          color: ${subheadingColor || color};
+          font-size: ${subheadingFontSize};
+          line-height: ${subheadingLineHeight};
+          margin: 0 0 ${subheadingMarginBottom} 0;
+          max-width: ${contentMaxWidth};
+          text-align: ${contentAlign};
         }
         .${heroClass} .sdui-hero-cta {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background-color: #2563eb;
-          color: #ffffff;
-          border-radius: 8px;
-          padding: 12px 24px;
+          background-color: ${ctaBackgroundColor};
+          color: ${ctaTextColor};
+          border-radius: ${ctaBorderRadius};
+          padding: ${ctaPaddingTop} ${ctaPaddingRight} ${ctaPaddingBottom} ${ctaPaddingLeft};
+          font-weight: ${ctaFontWeight};
           text-decoration: none;
           transition: all 0.2s ease-in-out;
         }
@@ -1259,7 +1298,15 @@ export const HeroBanner = ({
         {backgroundImage && (
           <div className="absolute inset-0 bg-black opacity-40" />
         )}
-        <div className="relative z-10 flex min-h-[inherit] flex-col items-center justify-center px-4 text-center">
+        <div
+          className={`relative z-10 flex min-h-[inherit] flex-col justify-center px-4 ${
+            contentAlign === "left"
+              ? "items-start"
+              : contentAlign === "right"
+                ? "items-end"
+                : "items-center"
+          }`}
+        >
           <h1 className="sdui-hero-title">{heading}</h1>
           <p className="sdui-hero-subtitle">{subheading}</p>
           <a
@@ -1307,7 +1354,7 @@ export const HeroBannerSettings = () => {
 
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              Text Color
+              Default Text Color
             </label>
             <input
               type="color"
@@ -1332,6 +1379,355 @@ export const HeroBannerSettings = () => {
               placeholder="https://..."
               title="Enter background image URL"
             />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b pb-4">
+        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
+          Content
+        </h4>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Heading
+            </label>
+            <textarea
+              value={props.heading ?? "Welcome to Our Institution"}
+              onChange={(e) =>
+                setProp((p: any) => (p.heading = e.target.value))
+              }
+              className="w-full px-3 py-2 border rounded text-sm"
+              rows={2}
+              title="Hero heading text"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Subheading
+            </label>
+            <textarea
+              value={props.subheading ?? "Excellence in Education"}
+              onChange={(e) =>
+                setProp((p: any) => (p.subheading = e.target.value))
+              }
+              className="w-full px-3 py-2 border rounded text-sm"
+              rows={2}
+              title="Hero subheading text"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Content Align
+              </label>
+              <select
+                value={props.contentAlign ?? "center"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.contentAlign = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                title="Hero content alignment"
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Content Max Width
+              </label>
+              <input
+                type="text"
+                value={props.contentMaxWidth ?? "900px"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.contentMaxWidth = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="900px"
+                title="Hero content max width"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Heading Size
+              </label>
+              <input
+                type="text"
+                value={props.headingFontSize ?? "56px"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.headingFontSize = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="56px"
+                title="Hero heading font size"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Heading Color
+              </label>
+              <input
+                type="color"
+                value={props.headingColor ?? props.color ?? "#ffffff"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.headingColor = e.target.value))
+                }
+                className="w-full h-10 border rounded cursor-pointer"
+                title="Hero heading color"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Heading Weight
+              </label>
+              <input
+                type="text"
+                value={props.headingFontWeight ?? "800"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.headingFontWeight = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="800"
+                title="Hero heading font weight"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Heading Line Height
+              </label>
+              <input
+                type="text"
+                value={props.headingLineHeight ?? "1.1"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.headingLineHeight = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="1.1"
+                title="Hero heading line height"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Subheading Size
+              </label>
+              <input
+                type="text"
+                value={props.subheadingFontSize ?? "20px"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.subheadingFontSize = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="20px"
+                title="Hero subheading font size"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Subheading Color
+              </label>
+              <input
+                type="color"
+                value={props.subheadingColor ?? props.color ?? "#ffffff"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.subheadingColor = e.target.value))
+                }
+                className="w-full h-10 border rounded cursor-pointer"
+                title="Hero subheading color"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Subheading Line Height
+              </label>
+              <input
+                type="text"
+                value={props.subheadingLineHeight ?? "1.6"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.subheadingLineHeight = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="1.6"
+                title="Hero subheading line height"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Subheading Margin Bottom
+              </label>
+              <input
+                type="text"
+                value={props.subheadingMarginBottom ?? "24px"}
+                onChange={(e) =>
+                  setProp(
+                    (p: any) => (p.subheadingMarginBottom = e.target.value),
+                  )
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="24px"
+                title="Hero subheading margin bottom"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b pb-4">
+        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
+          CTA Button
+        </h4>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Text
+              </label>
+              <input
+                type="text"
+                value={props.ctaText ?? "Learn More"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.ctaText = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="Learn More"
+                title="Hero CTA text"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Link
+              </label>
+              <input
+                type="text"
+                value={props.ctaLink ?? "#"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.ctaLink = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="#"
+                title="Hero CTA link"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button BG
+              </label>
+              <input
+                type="color"
+                value={props.ctaBackgroundColor ?? "#2563eb"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.ctaBackgroundColor = e.target.value))
+                }
+                className="w-full h-10 border rounded cursor-pointer"
+                title="Hero CTA background color"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Text Color
+              </label>
+              <input
+                type="color"
+                value={props.ctaTextColor ?? "#ffffff"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.ctaTextColor = e.target.value))
+                }
+                className="w-full h-10 border rounded cursor-pointer"
+                title="Hero CTA text color"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Radius
+              </label>
+              <input
+                type="text"
+                value={props.ctaBorderRadius ?? "8px"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.ctaBorderRadius = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="8px"
+                title="Hero CTA border radius"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Weight
+              </label>
+              <input
+                type="text"
+                value={props.ctaFontWeight ?? "600"}
+                onChange={(e) =>
+                  setProp((p: any) => (p.ctaFontWeight = e.target.value))
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="600"
+                title="Hero CTA font weight"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Padding Y
+              </label>
+              <input
+                type="text"
+                value={props.ctaPaddingTop ?? "12px"}
+                onChange={(e) =>
+                  setProp((p: any) => {
+                    p.ctaPaddingTop = e.target.value;
+                    p.ctaPaddingBottom = e.target.value;
+                  })
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="12px"
+                title="Hero CTA vertical padding"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                Button Padding X
+              </label>
+              <input
+                type="text"
+                value={props.ctaPaddingRight ?? "24px"}
+                onChange={(e) =>
+                  setProp((p: any) => {
+                    p.ctaPaddingRight = e.target.value;
+                    p.ctaPaddingLeft = e.target.value;
+                  })
+                }
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="24px"
+                title="Hero CTA horizontal padding"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1529,6 +1925,25 @@ HeroBanner.craft = {
     heading: "Welcome to Our Institution",
     subheading: "Excellence in Education",
     ctaText: "Learn More",
+    headingColor: "",
+    subheadingColor: "",
+    contentAlign: "center",
+    contentMaxWidth: "900px",
+    headingFontSize: "56px",
+    headingFontWeight: "800",
+    headingLineHeight: "1.1",
+    headingMarginBottom: "16px",
+    subheadingFontSize: "20px",
+    subheadingLineHeight: "1.6",
+    subheadingMarginBottom: "24px",
+    ctaBackgroundColor: "#2563eb",
+    ctaTextColor: "#ffffff",
+    ctaBorderRadius: "8px",
+    ctaPaddingTop: "12px",
+    ctaPaddingRight: "24px",
+    ctaPaddingBottom: "12px",
+    ctaPaddingLeft: "24px",
+    ctaFontWeight: "600",
     backgroundColor: "transparent",
     color: "#ffffff",
     backgroundImage: "",

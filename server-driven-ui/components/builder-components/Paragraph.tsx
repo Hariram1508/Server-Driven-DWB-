@@ -9,18 +9,28 @@ interface ParagraphProps {
   text?: string;
   color?: string;
   fontSize?: string;
+  width?: string;
   align?: "left" | "center" | "right" | "justify";
   fontWeight?: "normal" | "bold" | "semibold";
   lineHeight?: string;
+  positionMode?: "flow" | "absolute";
+  x?: string;
+  y?: string;
+  zIndex?: string;
 }
 
 export const Paragraph = ({
   text = "This is a paragraph. Edit this text to customize your content.",
   color = "#374151",
   fontSize = "16px",
+  width = "100%",
   align = "left",
   fontWeight = "normal",
   lineHeight = "1.6",
+  positionMode = "flow",
+  x = "0px",
+  y = "0px",
+  zIndex = "1",
 }: ParagraphProps) => {
   const {
     id,
@@ -41,10 +51,15 @@ export const Paragraph = ({
         .${paraClass} {
           color: ${color};
           font-size: ${fontSize};
+          width: ${width};
           font-weight: ${fontWeightMap[fontWeight]};
           text-align: ${align};
           line-height: ${lineHeight};
           margin: 0;
+          position: ${positionMode === "absolute" ? "absolute" : "relative"};
+          left: ${positionMode === "absolute" ? x : "auto"};
+          top: ${positionMode === "absolute" ? y : "auto"};
+          z-index: ${parseInt(zIndex, 10) || 1};
         }
       `}</style>
       <p
@@ -53,7 +68,7 @@ export const Paragraph = ({
             connect(drag(ref));
           }
         }}
-        className={`${paraClass} w-full`}
+        className={paraClass}
       >
         {text}
       </p>
@@ -92,6 +107,18 @@ export const ParagraphSettings = () => {
           className="w-full px-3 py-2 border rounded text-sm"
           title="Font size"
           placeholder="16px"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Width
+        </label>
+        <input
+          value={props.width ?? "100%"}
+          onChange={(e) => setProp((p: any) => (p.width = e.target.value))}
+          className="w-full px-3 py-2 border rounded text-sm"
+          title="Paragraph width"
+          placeholder="100% or 320px"
         />
       </div>
       <div>
@@ -137,6 +164,63 @@ export const ParagraphSettings = () => {
           <option value="bold">Bold</option>
         </select>
       </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Position Mode
+        </label>
+        <select
+          value={props.positionMode ?? "flow"}
+          onChange={(e) =>
+            setProp((p: any) => (p.positionMode = e.target.value))
+          }
+          className="w-full px-3 py-2 border rounded text-sm"
+          title="Paragraph position mode"
+        >
+          <option value="flow">Flow</option>
+          <option value="absolute">Absolute</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Z Index
+        </label>
+        <input
+          type="number"
+          value={props.zIndex ?? "1"}
+          onChange={(e) => setProp((p: any) => (p.zIndex = e.target.value))}
+          className="w-full px-3 py-2 border rounded text-sm"
+          title="Paragraph z-index"
+          placeholder="1"
+        />
+      </div>
+      {(props.positionMode ?? "flow") === "absolute" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              X
+            </label>
+            <input
+              value={props.x ?? "0px"}
+              onChange={(e) => setProp((p: any) => (p.x = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              title="Paragraph X position"
+              placeholder="0px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Y
+            </label>
+            <input
+              value={props.y ?? "0px"}
+              onChange={(e) => setProp((p: any) => (p.y = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              title="Paragraph Y position"
+              placeholder="0px"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -147,9 +231,14 @@ Paragraph.craft = {
     text: "This is a paragraph. Edit this text to customize your content.",
     color: "#374151",
     fontSize: "16px",
+    width: "100%",
     align: "left",
     fontWeight: "normal",
     lineHeight: "1.6",
+    positionMode: "flow",
+    x: "0px",
+    y: "0px",
+    zIndex: "1",
   },
   related: { toolbar: ParagraphSettings },
 };

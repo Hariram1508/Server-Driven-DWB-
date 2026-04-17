@@ -12,6 +12,10 @@ interface HeadingProps {
   align?: "left" | "center" | "right";
   fontSize?: string;
   fontWeight?: string;
+  positionMode?: "flow" | "absolute";
+  x?: string;
+  y?: string;
+  zIndex?: string;
 }
 
 const levelSizes: Record<string, string> = {
@@ -39,6 +43,10 @@ export const Heading = ({
   align = "left",
   fontSize,
   fontWeight,
+  positionMode = "flow",
+  x = "0px",
+  y = "0px",
+  zIndex = "1",
 }: HeadingProps) => {
   const {
     id,
@@ -59,6 +67,10 @@ export const Heading = ({
           text-align: ${align};
           line-height: 1.2;
           margin: 0;
+          position: ${positionMode === "absolute" ? "absolute" : "relative"};
+          left: ${positionMode === "absolute" ? x : "auto"};
+          top: ${positionMode === "absolute" ? y : "auto"};
+          z-index: ${parseInt(zIndex, 10) || 1};
         }
       `}</style>
       {level === "h1" && (
@@ -202,6 +214,63 @@ export const HeadingSettings = () => {
           title="Text color"
         />
       </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Position Mode
+        </label>
+        <select
+          value={props.positionMode ?? "flow"}
+          onChange={(e) =>
+            setProp((p: any) => (p.positionMode = e.target.value))
+          }
+          className="w-full px-3 py-2 border rounded text-sm"
+          title="Heading position mode"
+        >
+          <option value="flow">Flow</option>
+          <option value="absolute">Absolute</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Z Index
+        </label>
+        <input
+          type="number"
+          value={props.zIndex ?? "1"}
+          onChange={(e) => setProp((p: any) => (p.zIndex = e.target.value))}
+          className="w-full px-3 py-2 border rounded text-sm"
+          title="Heading z-index"
+          placeholder="1"
+        />
+      </div>
+      {(props.positionMode ?? "flow") === "absolute" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              X
+            </label>
+            <input
+              value={props.x ?? "0px"}
+              onChange={(e) => setProp((p: any) => (p.x = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              title="Heading X position"
+              placeholder="0px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Y
+            </label>
+            <input
+              value={props.y ?? "0px"}
+              onChange={(e) => setProp((p: any) => (p.y = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              title="Heading Y position"
+              placeholder="0px"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -213,6 +282,10 @@ Heading.craft = {
     level: "h2",
     color: "#000000",
     align: "left",
+    positionMode: "flow",
+    x: "0px",
+    y: "0px",
+    zIndex: "1",
   },
   related: { toolbar: HeadingSettings },
 };
