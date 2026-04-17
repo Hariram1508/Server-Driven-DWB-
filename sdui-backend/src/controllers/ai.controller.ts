@@ -255,6 +255,183 @@ export class AIController {
       return sendError(res, result.error || "Failed to modify HTML", 500);
     }
   });
+
+  // Multi-turn AI chat with persisted context memory
+  chatWithMemory = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { message, threadId, model } = req.body;
+    if (!message || !String(message).trim()) {
+      return sendError(res, "Message is required", 400);
+    }
+
+    const result = await aiService.chatWithMemory({
+      institutionId: req.user.institutionId,
+      userId: req.user.userId,
+      message: String(message).trim(),
+      threadId: typeof threadId === "string" ? threadId : undefined,
+      requestedModel: typeof model === "string" ? model : undefined,
+    });
+
+    return sendSuccess(res, result, "AI reply generated");
+  });
+
+  getConversationHistory = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const history = await aiService.getConversationHistory(
+      req.user.institutionId,
+      req.user.userId,
+    );
+
+    return sendSuccess(
+      res,
+      { conversations: history },
+      "Conversation history fetched",
+    );
+  });
+
+  getConversationThread = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const threadId = String(req.params.threadId || "").trim();
+    if (!threadId) {
+      return sendError(res, "Thread ID is required", 400);
+    }
+
+    const thread = await aiService.getConversationThread(
+      req.user.institutionId,
+      req.user.userId,
+      threadId,
+    );
+
+    if (!thread) {
+      return sendError(res, "Conversation thread not found", 404);
+    }
+
+    return sendSuccess(res, thread, "Conversation thread fetched");
+  });
+
+  runNlpBenchmark = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const result = await aiService.runNlpAccuracyBenchmark(
+      req.user.institutionId,
+      req.user.userId,
+    );
+    return sendSuccess(res, result, "NLP benchmark completed");
+  });
+
+  validateCompliance = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { pageJSON } = req.body;
+    if (!pageJSON || typeof pageJSON !== "object") {
+      return sendError(res, "Page JSON is required", 400);
+    }
+
+    const result = await aiService.runComplianceValidation(pageJSON);
+    return sendSuccess(res, result, "Compliance validation completed");
+  });
+
+  getLiveSuggestions = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { pageJSON } = req.body;
+    if (!pageJSON || typeof pageJSON !== "object") {
+      return sendError(res, "Page JSON is required", 400);
+    }
+
+    const result = await aiService.getLiveSuggestions(pageJSON);
+    return sendSuccess(res, result, "Live suggestions generated");
+  });
+
+  applySuggestion = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { pageJSON, operation } = req.body;
+    if (!pageJSON || typeof pageJSON !== "object") {
+      return sendError(res, "Page JSON is required", 400);
+    }
+    if (!operation || typeof operation !== "object") {
+      return sendError(res, "Operation is required", 400);
+    }
+
+    const updatedPageJSON = aiService.applySuggestionOperation(
+      pageJSON,
+      operation,
+    );
+    return sendSuccess(
+      res,
+      { pageJSON: updatedPageJSON },
+      "Suggestion applied",
+    );
+  });
+
+  getUsageSummary = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const from =
+      typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const to =
+      typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+
+    const summary = await aiService.getUsageSummary(
+      req.user.institutionId,
+      from,
+      to,
+    );
+    return sendSuccess(res, summary, "Usage summary fetched");
+  });
+
+  generateImage = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { prompt, size } = req.body;
+    if (!prompt || !String(prompt).trim()) {
+      return sendError(res, "Prompt is required", 400);
+    }
+
+    const result = await aiService.generateImageFromPrompt({
+      prompt: String(prompt).trim(),
+      size,
+      institutionId: req.user.institutionId,
+      userId: req.user.userId,
+    });
+    return sendSuccess(res, result, "Image generated successfully");
+  });
+
+  executeJsx = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { jsxCode } = req.body;
+    if (!jsxCode || !String(jsxCode).trim()) {
+      return sendError(res, "JSX code is required", 400);
+    }
+
+    const result = aiService.executeJsxAsLiveComponent(String(jsxCode));
+    return sendSuccess(res, result, "JSX compiled to live component payload");
+  });
 }
 
 export default new AIController();

@@ -1,7 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { createHash, randomUUID } from "crypto";
 import env from "../config/env";
+import { getRedisClient } from "../config/redis";
 import { AppError } from "../middleware/error.middleware";
+import { AIConversation } from "../models/AIConversation.model";
+import { AIUsage } from "../models/AIUsage.model";
 import { PageJSON } from "../types/page.types";
 import {
   getTemplate,
@@ -12,6 +16,7 @@ import {
 export class AIService {
   private anthropic: Anthropic | null = null;
   private groq: OpenAI | null = null;
+  private openai: OpenAI | null = null;
 
   constructor() {
     if (env.anthropicApiKey) {
@@ -27,7 +32,13 @@ export class AIService {
       });
     }
 
-    if (!this.anthropic && !this.groq) {
+    if (env.openaiApiKey) {
+      this.openai = new OpenAI({
+        apiKey: env.openaiApiKey,
+      });
+    }
+
+    if (!this.anthropic && !this.groq && !this.openai) {
       console.warn(
         "⚠️ No AI API keys configured. AI features will be disabled.",
       );
@@ -114,12 +125,13 @@ export class AIService {
     error?: string;
   }> {
     try {
+      const compactContext = this.buildCompactCommandContext(context);
       const prompt = `You are an AI assistant for a website builder.
     
 User command: "${command}"
 
 Current page context:
-${JSON.stringify(context, null, 2)}
+${JSON.stringify(compactContext, null, 2)}
 
 Analyze the command. Determine if the user wants to:
 1. Build a COMPLETELY NEW FULL PAGE or a FULL WEBSITE/TEMPLATE from scratch (Keywords: "full", "website", "template", "landing page", "html code", "full code"). For these, return the action "generate_full_html". This is the HIGHEST PRIORITY.
@@ -137,7 +149,7 @@ Response format:
 }
 
 VALID COMPONENT TYPES (only use these for insert/update): 
-HeroBanner, TextBlock, Container, AboutSection, Statistics, FacultyGrid, FAQAccordion, ContactForm, DynamicSection, Button, RawHTML.
+HeroBanner, TextBlock, Container, AboutSection, Statistics, FacultyGrid, FAQAccordion, ContactForm, FeedbackForm, DynamicSection, Button, RawHTML.
 CRITICAL: If the user says "full", "website", or "html page", DO NOT use "insert". USE "generate_full_html".
 
 Only respond with valid JSON, no explanations.`;
@@ -172,6 +184,7 @@ Only respond with valid JSON, no explanations.`;
           "FacultyGrid",
           "FAQAccordion",
           "ContactForm",
+          "FeedbackForm",
           "DynamicSection",
           "Button",
           "RawHTML",
@@ -198,6 +211,69 @@ Only respond with valid JSON, no explanations.`;
         error: "Failed to process command",
       };
     }
+  }
+
+  private buildCompactCommandContext(context: any): Record<string, unknown> {
+    if (!context || typeof context !== "object") {
+      return {};
+    }
+
+    const raw = context as Record<string, any>;
+    const rootNode = raw.ROOT;
+    const entries = Object.entries(raw).filter(([key]) => key !== "ROOT");
+
+    const components = entries.slice(0, 25).map(([id, node]) => {
+      const nodeObj = (node || {}) as Record<string, any>;
+      const type =
+        (nodeObj.type &&
+          typeof nodeObj.type === "object" &&
+          nodeObj.type.resolvedName) ||
+        nodeObj.type ||
+        "Unknown";
+      const props = (nodeObj.props || {}) as Record<string, unknown>;
+      const previewText = [
+        props.title,
+        props.subtitle,
+        props.description,
+        props.text,
+      ]
+        .filter(
+          (value) => typeof value === "string" && (value as string).trim(),
+        )
+        .join(" | ")
+        .slice(0, 180);
+
+      return {
+        id,
+        type,
+        previewText,
+      };
+    });
+
+    const componentCounts: Record<string, number> = {};
+    for (const [, node] of entries) {
+      const nodeObj = (node || {}) as Record<string, any>;
+      const type =
+        (nodeObj.type &&
+          typeof nodeObj.type === "object" &&
+          nodeObj.type.resolvedName) ||
+        nodeObj.type ||
+        "Unknown";
+      componentCounts[String(type)] = (componentCounts[String(type)] || 0) + 1;
+    }
+
+    return {
+      nodeCount: entries.length,
+      root: {
+        type:
+          rootNode && typeof rootNode === "object"
+            ? rootNode.type?.resolvedName || rootNode.type || "ROOT"
+            : "ROOT",
+      },
+      componentCounts,
+      componentPreview: components,
+      truncated: entries.length > 25,
+    };
   }
 
   // Generate content
@@ -1148,6 +1224,805 @@ ${cleanHtml}
     }
 
     return [...new Set(components)]; // Remove duplicates
+  }
+
+  private estimateTokensFromChars(chars: number): number {
+    return Math.max(1, Math.ceil(chars / 4));
+  }
+
+  private estimateCostUsd(
+    model: string,
+    inputTokens: number,
+    outputTokens: number,
+  ): number {
+    const ratesPerMToken: Record<string, { in: number; out: number }> = {
+      "claude-3-5-sonnet-20241022": { in: 3, out: 15 },
+      "llama-3.3-70b-versatile": { in: 0.59, out: 0.79 },
+      "gpt-4o-mini": { in: 0.15, out: 0.6 },
+      "gpt-image-1": { in: 0.4, out: 0.4 },
+    };
+
+    const modelRates = ratesPerMToken[model] || { in: 1, out: 1 };
+    const inputCost = (inputTokens / 1_000_000) * modelRates.in;
+    const outputCost = (outputTokens / 1_000_000) * modelRates.out;
+    return Number((inputCost + outputCost).toFixed(6));
+  }
+
+  private buildCacheKey(
+    model: string,
+    feature: string,
+    prompt: string,
+    jsonMode: boolean,
+  ): string {
+    const hash = createHash("sha256")
+      .update(`${model}|${feature}|${jsonMode}|${prompt}`)
+      .digest("hex");
+    return `ai:prompt-cache:${hash}`;
+  }
+
+  private getProviderFromModel(model: string): "anthropic" | "groq" | "openai" {
+    if (model.startsWith("claude")) return "anthropic";
+    if (model.startsWith("llama")) return "groq";
+    return "openai";
+  }
+
+  private resolveModel(requestedModel?: string): {
+    model: string;
+    provider: "anthropic" | "groq" | "openai";
+  } {
+    if (requestedModel) {
+      const explicitProvider = this.getProviderFromModel(requestedModel);
+      if (explicitProvider === "anthropic" && this.anthropic) {
+        return { model: requestedModel, provider: "anthropic" };
+      }
+      if (explicitProvider === "groq" && this.groq) {
+        return { model: requestedModel, provider: "groq" };
+      }
+      if (explicitProvider === "openai" && this.openai) {
+        return { model: requestedModel, provider: "openai" };
+      }
+    }
+
+    if (this.anthropic) {
+      return { model: "claude-3-5-sonnet-20241022", provider: "anthropic" };
+    }
+    if (this.groq) {
+      return { model: "llama-3.3-70b-versatile", provider: "groq" };
+    }
+    if (this.openai) {
+      return { model: "gpt-4o-mini", provider: "openai" };
+    }
+
+    throw new AppError("AI service not configured", 503, "AI_NOT_CONFIGURED");
+  }
+
+  private async callModel(
+    provider: "anthropic" | "groq" | "openai",
+    model: string,
+    prompt: string,
+    jsonMode: boolean,
+  ): Promise<string> {
+    if (provider === "anthropic") {
+      if (!this.anthropic) {
+        throw new AppError(
+          "Anthropic provider not configured",
+          503,
+          "AI_NOT_CONFIGURED",
+        );
+      }
+      const message = await this.anthropic.messages.create({
+        model,
+        max_tokens: jsonMode ? 2000 : 1000,
+        messages: [{ role: "user", content: prompt }],
+      });
+      return message.content[0].type === "text" ? message.content[0].text : "";
+    }
+
+    if (provider === "groq") {
+      if (!this.groq) {
+        throw new AppError(
+          "Groq provider not configured",
+          503,
+          "AI_NOT_CONFIGURED",
+        );
+      }
+      const response = await this.groq.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        response_format: jsonMode ? { type: "json_object" } : undefined,
+      });
+      return response.choices[0].message.content || "";
+    }
+
+    if (!this.openai) {
+      throw new AppError(
+        "OpenAI provider not configured",
+        503,
+        "AI_NOT_CONFIGURED",
+      );
+    }
+    const response = await this.openai.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      response_format: jsonMode ? { type: "json_object" } : undefined,
+    });
+    return response.choices[0].message.content || "";
+  }
+
+  async runTrackedPrompt(options: {
+    prompt: string;
+    institutionId: string;
+    userId: string;
+    feature: string;
+    requestedModel?: string;
+    jsonMode?: boolean;
+    useCache?: boolean;
+    cacheTtlSeconds?: number;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    text: string;
+    model: string;
+    provider: "anthropic" | "groq" | "openai";
+    cacheHit: boolean;
+    latencyMs: number;
+    usageId: string;
+  }> {
+    const {
+      prompt,
+      institutionId,
+      userId,
+      feature,
+      requestedModel,
+      jsonMode = false,
+      useCache = true,
+      cacheTtlSeconds = 3600,
+      metadata,
+    } = options;
+
+    const { model, provider } = this.resolveModel(requestedModel);
+    const startedAt = Date.now();
+
+    const cacheKey = this.buildCacheKey(model, feature, prompt, jsonMode);
+    if (useCache) {
+      try {
+        const redis = getRedisClient();
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          const latencyMs = Date.now() - startedAt;
+          const promptChars = prompt.length;
+          const responseChars = cached.length;
+          const inputTokensEstimated =
+            this.estimateTokensFromChars(promptChars);
+          const outputTokensEstimated =
+            this.estimateTokensFromChars(responseChars);
+          const usage = await AIUsage.create({
+            institutionId,
+            userId,
+            feature,
+            provider,
+            modelName: model,
+            promptChars,
+            responseChars,
+            inputTokensEstimated,
+            outputTokensEstimated,
+            estimatedCostUsd: 0,
+            cacheHit: true,
+            latencyMs,
+            metadata: metadata || {},
+          });
+          return {
+            text: cached,
+            model,
+            provider,
+            cacheHit: true,
+            latencyMs,
+            usageId: usage._id.toString(),
+          };
+        }
+      } catch (error) {
+        console.warn("AI cache read skipped:", error);
+      }
+    }
+
+    const text = await this.callModel(provider, model, prompt, jsonMode);
+    const latencyMs = Date.now() - startedAt;
+    const promptChars = prompt.length;
+    const responseChars = text.length;
+    const inputTokensEstimated = this.estimateTokensFromChars(promptChars);
+    const outputTokensEstimated = this.estimateTokensFromChars(responseChars);
+    const estimatedCostUsd = this.estimateCostUsd(
+      model,
+      inputTokensEstimated,
+      outputTokensEstimated,
+    );
+
+    const usage = await AIUsage.create({
+      institutionId,
+      userId,
+      feature,
+      provider,
+      modelName: model,
+      promptChars,
+      responseChars,
+      inputTokensEstimated,
+      outputTokensEstimated,
+      estimatedCostUsd,
+      cacheHit: false,
+      latencyMs,
+      metadata: metadata || {},
+    });
+
+    if (useCache) {
+      try {
+        const redis = getRedisClient();
+        await redis.set(cacheKey, text, "EX", cacheTtlSeconds);
+      } catch (error) {
+        console.warn("AI cache write skipped:", error);
+      }
+    }
+
+    return {
+      text,
+      model,
+      provider,
+      cacheHit: false,
+      latencyMs,
+      usageId: usage._id.toString(),
+    };
+  }
+
+  async chatWithMemory(options: {
+    institutionId: string;
+    userId: string;
+    message: string;
+    threadId?: string;
+    requestedModel?: string;
+  }): Promise<{
+    threadId: string;
+    reply: string;
+    model: string;
+    provider: "anthropic" | "groq" | "openai";
+    history: Array<{
+      role: "user" | "assistant";
+      message: string;
+      createdAt: Date;
+    }>;
+    cacheHit: boolean;
+    usageId: string;
+  }> {
+    const { institutionId, userId, message, requestedModel } = options;
+    const threadId = options.threadId?.trim() || randomUUID();
+
+    const conversation = await AIConversation.findOneAndUpdate(
+      { institutionId, userId, threadId },
+      {
+        $setOnInsert: {
+          title: message.slice(0, 60),
+        },
+      },
+      { new: true, upsert: true },
+    );
+
+    const history = conversation.exchanges.slice(-10);
+    const historyBlock = history
+      .map((exchange) => `${exchange.role.toUpperCase()}: ${exchange.message}`)
+      .join("\n");
+
+    const prompt = `You are an AI copilot for a server-driven UI platform. Keep answers practical and implementation-oriented.
+
+Conversation history:
+${historyBlock || "(none)"}
+
+Latest user message:
+${message}`;
+
+    const tracked = await this.runTrackedPrompt({
+      prompt,
+      institutionId,
+      userId,
+      feature: "chat-memory",
+      requestedModel,
+      jsonMode: false,
+      useCache: false,
+      metadata: { threadId },
+    });
+
+    const now = new Date();
+    const updated = await AIConversation.findOneAndUpdate(
+      { institutionId, userId, threadId },
+      {
+        $push: {
+          exchanges: {
+            $each: [
+              {
+                role: "user",
+                message,
+                model: tracked.model,
+                createdAt: now,
+              },
+              {
+                role: "assistant",
+                message: tracked.text,
+                model: tracked.model,
+                createdAt: now,
+              },
+            ],
+            $slice: -50,
+          },
+        },
+      },
+      { new: true },
+    );
+
+    return {
+      threadId,
+      reply: tracked.text,
+      model: tracked.model,
+      provider: tracked.provider,
+      history: updated?.exchanges.slice(-10) || [],
+      cacheHit: tracked.cacheHit,
+      usageId: tracked.usageId,
+    };
+  }
+
+  async getConversationHistory(institutionId: string, userId: string) {
+    const conversations = await AIConversation.find({ institutionId, userId })
+      .sort({ updatedAt: -1 })
+      .limit(15)
+      .select("threadId title exchanges updatedAt");
+
+    return conversations.map((conversation) => ({
+      threadId: conversation.threadId,
+      title: conversation.title || "AI Conversation",
+      updatedAt: conversation.updatedAt,
+      preview:
+        conversation.exchanges[
+          conversation.exchanges.length - 1
+        ]?.message?.slice(0, 120) || "",
+      exchangeCount: conversation.exchanges.length,
+    }));
+  }
+
+  async getConversationThread(
+    institutionId: string,
+    userId: string,
+    threadId: string,
+  ): Promise<{
+    threadId: string;
+    title: string;
+    updatedAt: Date;
+    exchanges: Array<{
+      role: "user" | "assistant";
+      message: string;
+      createdAt: Date;
+    }>;
+  } | null> {
+    const conversation = await AIConversation.findOne({
+      institutionId,
+      userId,
+      threadId,
+    }).select("threadId title updatedAt exchanges");
+
+    if (!conversation) {
+      return null;
+    }
+
+    return {
+      threadId: conversation.threadId,
+      title: conversation.title || "AI Conversation",
+      updatedAt: conversation.updatedAt,
+      exchanges: conversation.exchanges,
+    };
+  }
+
+  async getUsageSummary(institutionId: string, from?: Date, to?: Date) {
+    const fromDate = from || new Date(Date.now() - 1000 * 60 * 60 * 24 * 30);
+    const toDate = to || new Date();
+
+    const match = {
+      institutionId,
+      createdAt: { $gte: fromDate, $lte: toDate },
+    };
+
+    const [overview] = await AIUsage.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalCostUsd: { $sum: "$estimatedCostUsd" },
+          totalRequests: { $sum: 1 },
+          totalInputTokens: { $sum: "$inputTokensEstimated" },
+          totalOutputTokens: { $sum: "$outputTokensEstimated" },
+          cacheHits: {
+            $sum: {
+              $cond: ["$cacheHit", 1, 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    const byFeature = await AIUsage.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$feature",
+          requests: { $sum: 1 },
+          costUsd: { $sum: "$estimatedCostUsd" },
+        },
+      },
+      { $sort: { requests: -1 } },
+    ]);
+
+    const byModel = await AIUsage.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$modelName",
+          provider: { $first: "$provider" },
+          requests: { $sum: 1 },
+          costUsd: { $sum: "$estimatedCostUsd" },
+        },
+      },
+      { $sort: { requests: -1 } },
+    ]);
+
+    return {
+      period: {
+        from: fromDate,
+        to: toDate,
+      },
+      overview: {
+        totalCostUsd: Number((overview?.totalCostUsd || 0).toFixed(4)),
+        totalRequests: overview?.totalRequests || 0,
+        totalInputTokens: overview?.totalInputTokens || 0,
+        totalOutputTokens: overview?.totalOutputTokens || 0,
+        cacheHits: overview?.cacheHits || 0,
+      },
+      byFeature: byFeature.map((item) => ({
+        feature: item._id,
+        requests: item.requests,
+        costUsd: Number(item.costUsd.toFixed(4)),
+      })),
+      byModel: byModel.map((item) => ({
+        model: item._id,
+        provider: item.provider,
+        requests: item.requests,
+        costUsd: Number(item.costUsd.toFixed(4)),
+      })),
+    };
+  }
+
+  async runNlpAccuracyBenchmark(
+    institutionId: string,
+    userId: string,
+  ): Promise<{
+    accuracy: number;
+    total: number;
+    passed: number;
+    results: Array<{
+      prompt: string;
+      expected: string;
+      actual: string;
+      passed: boolean;
+    }>;
+  }> {
+    const dataset: Array<{ prompt: string; expected: string }> = [
+      { prompt: "Add a hero section", expected: "insert" },
+      { prompt: "Delete the footer", expected: "delete" },
+      { prompt: "Update CTA button text", expected: "update" },
+      {
+        prompt: "Build a full college website",
+        expected: "generate_full_html",
+      },
+      { prompt: "Move testimonials above contact", expected: "move" },
+    ];
+
+    const results: Array<{
+      prompt: string;
+      expected: string;
+      actual: string;
+      passed: boolean;
+    }> = [];
+    for (const sample of dataset) {
+      const response = await this.processCommand(sample.prompt, {});
+      const actual = response.operation?.action || "unknown";
+      results.push({
+        prompt: sample.prompt,
+        expected: sample.expected,
+        actual,
+        passed: actual === sample.expected,
+      });
+    }
+
+    const passed = results.filter((result) => result.passed).length;
+    const accuracy = Number(((passed / dataset.length) * 100).toFixed(2));
+
+    await AIUsage.create({
+      institutionId,
+      userId,
+      feature: "nlp-benchmark",
+      provider: "internal",
+      modelName: "rule-based",
+      promptChars: dataset
+        .map((item) => item.prompt.length)
+        .reduce((a, b) => a + b, 0),
+      responseChars: JSON.stringify(results).length,
+      inputTokensEstimated: 0,
+      outputTokensEstimated: 0,
+      estimatedCostUsd: 0,
+      cacheHit: false,
+      latencyMs: 0,
+      metadata: { accuracy, total: dataset.length, passed },
+    });
+
+    return { accuracy, total: dataset.length, passed, results };
+  }
+
+  async runComplianceValidation(pageJSON: PageJSON): Promise<{
+    score: number;
+    checks: Array<{
+      category: "AICTE" | "UGC" | "WCAG" | "SEO";
+      status: "pass" | "warn" | "fail";
+      message: string;
+    }>;
+  }> {
+    const checks: Array<{
+      category: "AICTE" | "UGC" | "WCAG" | "SEO";
+      status: "pass" | "warn" | "fail";
+      message: string;
+    }> = [];
+
+    const components = pageJSON?.components || [];
+    const hasContact = components.some((component) =>
+      ["ContactForm", "InquiryForm"].includes(component.type),
+    );
+    const hasFaculty = components.some((component) =>
+      ["FacultyGrid", "FacultyProfile"].includes(component.type),
+    );
+    const hasAccessibilityFriendlyText = components.some((component) => {
+      const text = JSON.stringify(component.props || {}).toLowerCase();
+      return text.includes("alt") || text.includes("aria");
+    });
+    const meta = pageJSON?.meta || {};
+    const hasTitle = Boolean(meta.title?.trim());
+    const hasDescription = Boolean(meta.description?.trim());
+
+    checks.push({
+      category: "AICTE",
+      status: hasFaculty ? "pass" : "warn",
+      message: hasFaculty
+        ? "Faculty information components detected."
+        : "Add faculty components for stronger AICTE compliance context.",
+    });
+    checks.push({
+      category: "UGC",
+      status: hasContact ? "pass" : "warn",
+      message: hasContact
+        ? "Contact/inquiry mechanism detected."
+        : "Add inquiry/contact form for UGC information accessibility expectations.",
+    });
+    checks.push({
+      category: "WCAG",
+      status: hasAccessibilityFriendlyText ? "pass" : "warn",
+      message: hasAccessibilityFriendlyText
+        ? "Accessibility-related attributes found in component props."
+        : "Add alt text and ARIA labels to improve WCAG alignment.",
+    });
+    checks.push({
+      category: "SEO",
+      status: hasTitle && hasDescription ? "pass" : "fail",
+      message:
+        hasTitle && hasDescription
+          ? "Page meta title and description are present."
+          : "Meta title/description missing. Add both for baseline SEO.",
+    });
+
+    const score = Math.round(
+      (checks.filter((check) => check.status === "pass").length /
+        checks.length) *
+        100,
+    );
+    return { score, checks };
+  }
+
+  async getLiveSuggestions(pageJSON: PageJSON): Promise<{
+    suggestions: Array<{
+      id: string;
+      title: string;
+      impact: "high" | "medium" | "low";
+      operation: Record<string, unknown>;
+    }>;
+  }> {
+    const suggestions: Array<{
+      id: string;
+      title: string;
+      impact: "high" | "medium" | "low";
+      operation: Record<string, unknown>;
+    }> = [];
+
+    const components = pageJSON?.components || [];
+    const hasFaq = components.some(
+      (component) => component.type === "FAQAccordion",
+    );
+    const hasCta = components.some((component) =>
+      ["ActionButton", "Button"].includes(component.type),
+    );
+
+    if (!hasFaq) {
+      suggestions.push({
+        id: randomUUID(),
+        title: "Add FAQ section to improve conversion and clarity",
+        impact: "high",
+        operation: {
+          op: "add-component",
+          component: {
+            type: "FAQAccordion",
+            props: {
+              title: "Frequently Asked Questions",
+              items: [
+                {
+                  q: "How do I apply?",
+                  a: "Use the admissions form on this site.",
+                },
+                {
+                  q: "Do you offer scholarships?",
+                  a: "Yes, merit and need-based scholarships are available.",
+                },
+              ],
+            },
+          },
+        },
+      });
+    }
+
+    if (!hasCta) {
+      suggestions.push({
+        id: randomUUID(),
+        title: "Add a primary CTA button above the fold",
+        impact: "high",
+        operation: {
+          op: "add-component",
+          component: {
+            type: "ActionButton",
+            props: {
+              text: "Apply Now",
+              backgroundColor: "#2563eb",
+              textColor: "#ffffff",
+            },
+          },
+        },
+      });
+    }
+
+    if (!pageJSON?.meta?.description) {
+      suggestions.push({
+        id: randomUUID(),
+        title: "Add SEO description metadata",
+        impact: "medium",
+        operation: {
+          op: "set-meta",
+          meta: {
+            description:
+              "Leading institution with modern programs, industry-ready curriculum, and strong placement support.",
+          },
+        },
+      });
+    }
+
+    return { suggestions };
+  }
+
+  applySuggestionOperation(
+    pageJSON: PageJSON,
+    operation: Record<string, any>,
+  ): PageJSON {
+    const safeConfig: PageJSON = {
+      components: [...(pageJSON?.components || [])],
+      meta: {
+        ...(pageJSON?.meta || {}),
+      },
+    };
+
+    if (operation.op === "add-component" && operation.component) {
+      safeConfig.components.push(operation.component);
+    }
+
+    if (operation.op === "set-meta" && operation.meta) {
+      safeConfig.meta = {
+        ...(safeConfig.meta || {}),
+        ...operation.meta,
+      };
+    }
+
+    return safeConfig;
+  }
+
+  async generateImageFromPrompt(options: {
+    prompt: string;
+    institutionId: string;
+    userId: string;
+    size?: "1024x1024" | "1024x1536" | "1536x1024";
+  }): Promise<{ url: string; provider: "openai" | "fallback"; model: string }> {
+    const { prompt, institutionId, userId, size = "1024x1024" } = options;
+
+    if (this.openai) {
+      const start = Date.now();
+      const response = await this.openai.images.generate({
+        model: "gpt-image-1",
+        prompt,
+        size,
+      });
+      const imageBase64 = response.data?.[0]?.b64_json;
+      if (imageBase64) {
+        const dataUrl = `data:image/png;base64,${imageBase64}`;
+        const latencyMs = Date.now() - start;
+        await AIUsage.create({
+          institutionId,
+          userId,
+          feature: "image-generation",
+          provider: "openai",
+          modelName: "gpt-image-1",
+          promptChars: prompt.length,
+          responseChars: imageBase64.length,
+          inputTokensEstimated: this.estimateTokensFromChars(prompt.length),
+          outputTokensEstimated: this.estimateTokensFromChars(
+            imageBase64.length,
+          ),
+          estimatedCostUsd: 0,
+          cacheHit: false,
+          latencyMs,
+          metadata: { size },
+        });
+        return { url: dataUrl, provider: "openai", model: "gpt-image-1" };
+      }
+    }
+
+    // Fallback deterministic placeholder when image API key is not configured.
+    const fallbackUrl = `https://picsum.photos/seed/${encodeURIComponent(prompt.slice(0, 64))}/1200/800`;
+    await AIUsage.create({
+      institutionId,
+      userId,
+      feature: "image-generation",
+      provider: "internal",
+      modelName: "fallback-image-url",
+      promptChars: prompt.length,
+      responseChars: fallbackUrl.length,
+      inputTokensEstimated: 0,
+      outputTokensEstimated: 0,
+      estimatedCostUsd: 0,
+      cacheHit: false,
+      latencyMs: 0,
+      metadata: { fallback: true },
+    });
+
+    return {
+      url: fallbackUrl,
+      provider: "fallback",
+      model: "fallback-image-url",
+    };
+  }
+
+  executeJsxAsLiveComponent(jsxCode: string): {
+    component: {
+      type: string;
+      props: Record<string, unknown>;
+    };
+  } {
+    const safeJsx = jsxCode.trim();
+    if (!safeJsx) {
+      throw new AppError("JSX code is required", 400, "INVALID_JSX");
+    }
+
+    // MVP-safe execution: map generated JSX to RawHTML payload for immediate rendering.
+    return {
+      component: {
+        type: "RawHTML",
+        props: {
+          html: safeJsx,
+        },
+      },
+    };
   }
 }
 

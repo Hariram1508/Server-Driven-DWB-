@@ -6,17 +6,68 @@ import {
   Bot,
   Send,
   X,
+  Minus,
   Sparkles,
   MessageSquare,
   FileCode,
   Layers,
   Wand2,
+  History,
+  Lightbulb,
+  ShieldCheck,
 } from "lucide-react";
 import * as aiApi from "@/lib/api/ai.api";
 import { toast } from "sonner";
 import { ComponentMapper } from "./renderer/ComponentMapper";
 
 export type ChatMode = "command" | "design" | "full";
+
+type ChatMessage = {
+  role: "user" | "ai";
+  content: string;
+  imageUrl?: string;
+};
+
+const isImageRequest = (text: string) =>
+  /\b(image|picture|photo|poster|banner|illustration|generate an image|create an image|create image|make an image)\b/i.test(
+    text,
+  );
+
+const isComponentPlacementRequest = (text: string) =>
+  /\b(add|insert|place|put|move|attach|drop)\b/i.test(text) &&
+  /\b(component|form|button|section|card|banner|hero|footer|header|grid|faq|feedback|contact|image)\b/i.test(
+    text,
+  );
+
+const formatValidationDetails = (details: unknown): string => {
+  if (Array.isArray(details)) {
+    return details
+      .map((item) => {
+        if (!item || typeof item !== "object") return String(item);
+        const record = item as Record<string, unknown>;
+        const field = String(record.field || record.param || "field");
+        const message = String(
+          record.message || record.msg || record.detail || "Invalid value",
+        );
+        return `${field}: ${message}`;
+      })
+      .join(", ");
+  }
+
+  if (typeof details === "string") {
+    return details;
+  }
+
+  if (details && typeof details === "object") {
+    try {
+      return JSON.stringify(details);
+    } catch {
+      return "Validation error";
+    }
+  }
+
+  return "Validation error";
+};
 
 export const AIChat = ({
   onFullBuild,
@@ -26,165 +77,475 @@ export const AIChat = ({
   onModeChange?: (mode: ChatMode) => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [messages, setMessages] = useState<
-    { role: "user" | "ai"; content: string }[]
-  >([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [mode, setMode] = useState<ChatMode>("command");
+  const [activeThreadId, setActiveThreadId] = useState<string | undefined>(
+    undefined,
+  );
+  const [history, setHistory] = useState<
+    { threadId: string; title: string; updatedAt: string }[]
+  >([]);
+  const [currentThreadTitle, setCurrentThreadTitle] = useState<string | null>(
+    null,
+  );
+  const [selectedModel, setSelectedModel] = useState<string>(
+    "llama-3.3-70b-versatile",
+  );
+  const [suggestions, setSuggestions] = useState<
+    {
+      id: string;
+      title: string;
+      impact: "high" | "medium" | "low";
+      operation: Record<string, any>;
+    }[]
+  >([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [openingThreadId, setOpeningThreadId] = useState<string | null>(null);
+  const [complianceScore, setComplianceScore] = useState<number | null>(null);
   const { actions, query } = useEditor();
+
+  const craftToPageJSON = () => {
+    try {
+      const serialized = JSON.parse(query.serialize()) as Record<string, any>;
+      const components = Object.entries(serialized)
+        .filter(([id]) => id !== "ROOT")
+        .map(([, node]) => ({
+          type: node?.type?.resolvedName || "Container",
+          props: node?.props || {},
+        }));
+      return {
+        components,
+        meta: {},
+      };
+    } catch {
+      return { components: [], meta: {} };
+    }
+  };
+
+  const buildCompactCommandContext = () => {
+    try {
+      const serialized = JSON.parse(query.serialize()) as Record<string, any>;
+      const entries = Object.entries(serialized).filter(
+        ([id]) => id !== "ROOT",
+      );
+
+      const componentCounts: Record<string, number> = {};
+      const componentPreview = entries.slice(0, 20).map(([id, node]) => {
+        const type = node?.type?.resolvedName || "Unknown";
+        componentCounts[type] = (componentCounts[type] || 0) + 1;
+        return {
+          id,
+          type,
+          previewText: [
+            node?.props?.title,
+            node?.props?.subtitle,
+            node?.props?.description,
+          ]
+            .filter((value) => typeof value === "string" && value.trim())
+            .join(" | ")
+            .slice(0, 120),
+        };
+      });
+
+      return {
+        nodeCount: entries.length,
+        componentCounts,
+        componentPreview,
+        truncated: entries.length > 20,
+      };
+    } catch {
+      return {};
+    }
+  };
+
+  const loadConversationHistory = async () => {
+    try {
+      const response = await aiApi.getConversationHistory();
+      const conversations = response?.data?.conversations || [];
+      setHistory(conversations);
+    } catch {
+      setHistory([]);
+    }
+  };
+
+  const openConversationThread = async (threadId: string) => {
+    try {
+      setOpeningThreadId(threadId);
+      const response = await aiApi.getConversationThread(threadId);
+      const data = response?.data;
+      const exchanges = data?.exchanges || [];
+      const matchedHistoryItem = history.find(
+        (item) => item.threadId === threadId,
+      );
+
+      setMessages(
+        exchanges.map(
+          (exchange: { role: "user" | "assistant"; message: string }) => ({
+            role: exchange.role === "assistant" ? "ai" : "user",
+            content: exchange.message,
+          }),
+        ),
+      );
+      setActiveThreadId(threadId);
+      setCurrentThreadTitle(
+        String(
+          data?.title || matchedHistoryItem?.title || "Conversation",
+        ).trim(),
+      );
+      setShowHistory(false);
+      toast.success("Previous conversation loaded");
+    } catch {
+      toast.error("Could not open this conversation");
+    } finally {
+      setOpeningThreadId(null);
+    }
+  };
+
+  const startNewChat = () => {
+    setActiveThreadId(undefined);
+    setCurrentThreadTitle(null);
+    setMessages([]);
+    setPrompt("");
+    setShowHistory(true);
+    toast.success("Started a new chat");
+  };
+
+  const loadSuggestions = async () => {
+    setIsLoadingSuggestions(true);
+    try {
+      const response = await aiApi.getLiveSuggestions(craftToPageJSON());
+      setSuggestions(response?.data?.suggestions || []);
+      if (!response?.data?.suggestions?.length) {
+        toast.success("No critical suggestions right now. Great structure!");
+      }
+    } catch {
+      toast.error("Failed to load live suggestions");
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
+
+  const applySuggestion = async (operation: Record<string, any>) => {
+    if (operation.op === "add-component" && operation.component) {
+      const type = operation.component.type as string;
+      const props = operation.component.props || {};
+      const typeKey = Object.keys(ComponentMapper).find(
+        (k) => k.toLowerCase() === type.toLowerCase(),
+      );
+      const Component = typeKey ? ComponentMapper[typeKey] : null;
+
+      if (Component) {
+        actions.add(
+          query.createNode(React.createElement(Component, props)),
+          "ROOT",
+        );
+        toast.success("Suggestion applied");
+        return;
+      }
+    }
+
+    if (operation.op === "set-meta") {
+      toast.success(
+        "Meta suggestion noted. Apply this in page metadata settings.",
+      );
+      return;
+    }
+
+    try {
+      const response = await aiApi.applySuggestion(
+        craftToPageJSON(),
+        operation,
+      );
+      if (response?.success) {
+        toast.success("Suggestion processed");
+      } else {
+        toast.error("Failed to apply suggestion");
+      }
+    } catch {
+      toast.error("Failed to apply suggestion");
+    }
+  };
+
+  const runComplianceCheck = async () => {
+    try {
+      const response = await aiApi.validateCompliance(craftToPageJSON());
+      const score = response?.data?.score;
+      setComplianceScore(typeof score === "number" ? score : null);
+      if (typeof score === "number") {
+        toast.success(`Compliance score: ${score}%`);
+      }
+    } catch {
+      toast.error("Failed to run compliance validation");
+    }
+  };
+
+  React.useEffect(() => {
+    if (isOpen) {
+      void loadConversationHistory();
+    }
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (isOpen && !isMinimized) {
+          setIsMinimized(true);
+        } else if (isOpen && isMinimized) {
+          setIsOpen(false);
+          setIsMinimized(false);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, isMinimized]);
 
   const handleModeChange = (newMode: ChatMode) => {
     setMode(newMode);
     onModeChange?.(newMode);
   };
 
-  const handleSend = async () => {
-    if (!prompt.trim()) return;
+  const runCommandFlow = async (userMessage: string, memoryData?: any) => {
+    const response = await aiApi.processCommand(
+      userMessage,
+      buildCompactCommandContext(),
+    );
 
-    const userMessage = prompt.trim();
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-    setPrompt("");
-    setIsTyping(true);
+    if (!response.success || !response.data) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content: memoryData?.reply
+            ? `${memoryData.reply}\n\n${response.error || "Sorry, I couldn't process that request."}`
+            : response.error || "Sorry, I couldn't process that request.",
+        },
+      ]);
+      return;
+    }
 
-    try {
-      if (mode === "full" && onFullBuild) {
+    const operation = response.data;
+    console.log("AI Operation received:", operation);
+
+    if (operation.action === "generate_full_html") {
+      console.log(
+        "Action is generate_full_html, onFullBuild is:",
+        !!onFullBuild,
+      );
+      if (onFullBuild) {
         setMessages((prev) => [
           ...prev,
           {
             role: "ai",
-            content:
-              "Architecting your full website now. I am compiling the page and placing it into the visual editor.",
+            content: memoryData?.reply
+              ? `${memoryData.reply}\n\nYou requested a full page. I am generating the complete layout now and showing it in the visual editor...`
+              : "You requested a full page. I am generating the complete layout now and showing it in the visual editor...",
           },
         ]);
-        onFullBuild(userMessage);
-        setIsTyping(false);
+        handleModeChange("full");
+        onFullBuild(operation.prompt || userMessage);
         return;
       }
+      console.error("onFullBuild callback is missing!");
+    }
 
-      if (mode === "design") {
-        const response = await aiApi.generateComponent(userMessage);
-        if (response.success && response.data) {
-          window.dispatchEvent(new CustomEvent("customComponentGenerated"));
+    if (
+      operation.action === "insert" ||
+      operation.action === "update" ||
+      operation.action === "delete"
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", content: "Updating your design now..." },
+      ]);
+    }
+
+    if (operation.action === "insert" && operation.component) {
+      const { type, props } = operation.component;
+      const typeKey = Object.keys(ComponentMapper).find(
+        (k) => k.toLowerCase() === String(type).toLowerCase(),
+      );
+      const Component = typeKey ? ComponentMapper[typeKey] : null;
+
+      if (Component) {
+        actions.add(
+          query.createNode(React.createElement(Component, props)),
+          "ROOT",
+        );
+        toast.success(`Added ${type} component!`);
+      } else if (
+        String(type).toLowerCase().includes("template") ||
+        String(type).toLowerCase().includes("page")
+      ) {
+        if (onFullBuild) {
           setMessages((prev) => [
             ...prev,
             {
               role: "ai",
-              content: `I've created a new component: **${response.data.name}**. I've added it to the "AI Generated" section. You can now drag it onto the page!`,
+              content: `I don't have a specific "${type}" component, but I can build a full page for you using that theme. Building your page now...`,
             },
           ]);
-          toast.success("New component generated!");
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content: response.error || "Failed to generate component.",
-            },
-          ]);
+          onFullBuild(userMessage);
         }
       } else {
-        // Get current page context for AI
-        const context = query.serialize();
-        const response = await aiApi.processCommand(
-          userMessage,
-          JSON.parse(context),
-        );
+        console.warn(`Component type ${type} not found in mapper`);
+        toast.error(`Unknown component type: ${type}`);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            content: memoryData?.reply
+              ? `${memoryData.reply}\n\nSorry, I don't know how to create a "${type}" component yet. Try asking for a HeroBanner or TextBlock.`
+              : `Sorry, I don't know how to create a "${type}" component yet. Try asking for a HeroBanner or TextBlock.`,
+          },
+        ]);
+      }
+    }
 
-        if (response.success && response.data) {
-          const operation = response.data;
-          console.log("AI Operation received:", operation);
+    void loadConversationHistory();
+  };
 
-          if (operation.action === "generate_full_html") {
-            console.log(
-              "Action is generate_full_html, onFullBuild is:",
-              !!onFullBuild,
-            );
-            if (onFullBuild) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "ai",
-                  content:
-                    "You requested a full page. I am generating the complete layout now and showing it in the visual editor...",
-                },
-              ]);
-              handleModeChange("full");
-              onFullBuild(operation.prompt || userMessage);
-              setIsTyping(false);
-              return;
-            } else {
-              console.error("onFullBuild callback is missing!");
-            }
-          }
+  const handleSend = async () => {
+    if (!prompt.trim()) return;
 
-          // For specific block modifications
-          if (
-            operation.action === "insert" ||
-            operation.action === "update" ||
-            operation.action === "delete"
-          ) {
-            console.log("Action is block modification:", operation.action);
-            setMessages((prev) => [
-              ...prev,
-              { role: "ai", content: "Updating your design now..." },
-            ]);
-          }
+    const userMessage = prompt.trim();
+    setPrompt("");
+    setIsTyping(true);
 
-          // Execute the operation
-          if (operation.action === "insert" && operation.component) {
-            const { type, props } = operation.component;
+    const nextThreadId = activeThreadId;
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
-            // Case-insensitive lookup
-            const typeKey = Object.keys(ComponentMapper).find(
-              (k) => k.toLowerCase() === type.toLowerCase(),
-            );
-            const Component = typeKey ? ComponentMapper[typeKey] : null;
+    if (isImageRequest(userMessage)) {
+      try {
+        const imageResponse = await aiApi.generateImage(userMessage);
+        const imageData = imageResponse?.data ?? imageResponse;
+        const imageUrl = imageData?.url || imageData?.imageUrl;
 
-            if (Component) {
-              actions.add(
-                query.createNode(React.createElement(Component, props)),
-                "ROOT",
-              );
-              toast.success(`Added ${type} component!`);
-            } else {
-              // Fallback: If it's a "template" or "page" request that the AI misclassified as insert
-              if (
-                (type.toLowerCase().includes("template") ||
-                  type.toLowerCase().includes("page")) &&
-                onFullBuild
-              ) {
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    role: "ai",
-                    content: `I don't have a specific "${type}" component, but I can build a full page for you using that theme. Building your page now...`,
-                  },
-                ]);
-                onFullBuild(userMessage);
-              } else {
-                console.warn(`Component type ${type} not found in mapper`);
-                toast.error(`Unknown component type: ${type}`);
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    role: "ai",
-                    content: `Sorry, I don't know how to create a "${type}" component yet. Try asking for a HeroBanner or TextBlock.`,
-                  },
-                ]);
-              }
-            }
-          }
-        } else {
+        if (imageUrl) {
           setMessages((prev) => [
             ...prev,
             {
               role: "ai",
               content:
-                response.error || "Sorry, I couldn't process that request.",
+                imageData?.provider === "fallback"
+                  ? "I could not reach an image model, so I generated a fallback preview image."
+                  : "Image generated successfully.",
+              imageUrl,
             },
           ]);
+          toast.success("Image generated");
+          return;
         }
+
+        throw new Error("No image URL returned");
+      } catch (error: any) {
+        console.error("Image generation error:", error);
+        const responseData = error?.response?.data;
+        const errorMessage =
+          responseData?.error?.message ||
+          error?.message ||
+          "Failed to create image";
+        toast.error(errorMessage);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            content: `Error: ${errorMessage}. Please try again.`,
+          },
+        ]);
+        return;
+      } finally {
+        setIsTyping(false);
+      }
+    }
+
+    try {
+      const memoryResponse = await aiApi.chatWithMemory(
+        userMessage,
+        nextThreadId,
+        selectedModel,
+      );
+      const memoryData = memoryResponse?.data;
+      if (memoryData?.threadId) {
+        setActiveThreadId(memoryData.threadId);
+        if (!currentThreadTitle) {
+          setCurrentThreadTitle(userMessage.slice(0, 60));
+        }
+      }
+
+      if (mode === "full" && onFullBuild) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            content: memoryData?.reply
+              ? `${memoryData.reply}\n\nArchitecting your full website now. I am compiling the page and placing it into the visual editor.`
+              : "Architecting your full website now. I am compiling the page and placing it into the visual editor.",
+          },
+        ]);
+        onFullBuild(userMessage);
+        void loadConversationHistory();
+        setIsTyping(false);
+        return;
+      }
+
+      if (mode === "design") {
+        if (isComponentPlacementRequest(userMessage)) {
+          await runCommandFlow(userMessage, memoryData);
+        } else {
+          try {
+            const response = await aiApi.generateComponent(userMessage);
+            if (response.success && response.data) {
+              window.dispatchEvent(new CustomEvent("customComponentGenerated"));
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "ai",
+                  content: `${memoryData?.reply ? `${memoryData.reply}\n\n` : ""}I've created a new component: **${response.data.name}**. I've added it to the "AI Generated" section. You can now drag it onto the page!`,
+                },
+              ]);
+              toast.success("New component generated!");
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "ai",
+                  content: response.error || "Failed to generate component.",
+                },
+              ]);
+            }
+          } catch (error: any) {
+            const responseData = error?.response?.data;
+            const fallbackMessage =
+              responseData?.error?.message ||
+              error?.message ||
+              "Failed to generate component.";
+
+            if (
+              error?.response?.status === 400 ||
+              /jsxCode is required/i.test(fallbackMessage) ||
+              /validation/i.test(fallbackMessage)
+            ) {
+              await runCommandFlow(userMessage, memoryData);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "ai",
+                  content: fallbackMessage,
+                },
+              ]);
+              toast.error(fallbackMessage);
+            }
+          }
+        }
+      } else {
+        await runCommandFlow(userMessage, memoryData);
       }
     } catch (error: any) {
       console.error("AI error:", error);
@@ -192,14 +553,11 @@ export const AIChat = ({
       let errorMessage =
         responseData?.error?.message || "Failed to connect to AI service";
 
-      // Check for validation errors and show details
       if (
         responseData?.error?.code === "VALIDATION_ERROR" &&
         responseData.error.details
       ) {
-        const details = responseData.error.details
-          .map((d: any) => `${d.field}: ${d.message}`)
-          .join(", ");
+        const details = formatValidationDetails(responseData.error.details);
         errorMessage = `Validation error - ${details}`;
       }
 
@@ -213,123 +571,334 @@ export const AIChat = ({
     }
   };
 
+  const handleToggleOpen = () => {
+    setIsOpen(true);
+    setIsMinimized(false);
+  };
+
+  const modeButtonClass = (targetMode: ChatMode) =>
+    `px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+      mode === targetMode
+        ? "bg-blue-600 text-white"
+        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+    }`;
+
   return (
     <div className="fixed bottom-20 right-5 z-60 md:bottom-8 md:right-6">
       {isOpen ? (
-        <div className="bg-white rounded-3xl shadow-2xl w-88 h-[72vh] max-h-180 min-h-105 flex flex-col overflow-hidden border border-gray-100 animate-in slide-in-from-bottom-5 duration-300">
-          <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bot className="w-6 h-6" />
+        <div
+          className={`bg-white rounded-2xl shadow-2xl w-90 md:w-96 overflow-hidden border border-gray-200 animate-in slide-in-from-bottom-5 duration-300 flex flex-col ${
+            isMinimized ? "h-16" : "h-[72vh] max-h-180 min-h-105"
+          }`}
+        >
+          <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white grid place-items-center shrink-0">
+                <Bot className="w-4 h-4" />
+              </div>
               <div>
-                <h3 className="font-bold text-sm">AI Design Assistant</h3>
-                <div className="flex gap-1.5 mt-2">
-                  <button
-                    onClick={() => handleModeChange("command")}
-                    className={`text-[9px] px-2 py-1 rounded-full border transition-all flex items-center gap-1 ${mode === "command" ? "bg-white text-blue-600 border-white font-black" : "bg-transparent text-white/70 border-white/20"}`}
-                  >
-                    <Layers className="w-2.5 h-2.5" /> Edit Blocks
-                  </button>
-                  <button
-                    onClick={() => handleModeChange("design")}
-                    className={`text-[9px] px-2 py-1 rounded-full border transition-all flex items-center gap-1 ${mode === "design" ? "bg-white text-blue-600 border-white font-black" : "bg-transparent text-white/70 border-white/20"}`}
-                  >
-                    <Wand2 className="w-2.5 h-2.5" /> New Component
-                  </button>
-                  <button
-                    onClick={() => handleModeChange("full")}
-                    className={`text-[9px] px-2 py-1 rounded-full border transition-all flex items-center gap-1 ${mode === "full" ? "bg-white text-blue-600 border-white font-black" : "bg-transparent text-white/70 border-white/20"}`}
-                  >
-                    <FileCode className="w-2.5 h-2.5" /> Full Build
-                  </button>
-                </div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  AI Design Assistant
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {isMinimized ? "Minimized" : "Chat open"}
+                </p>
               </div>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1 hover:bg-white/10 rounded-full transition"
-              title="Close chat panel"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-            {messages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
-                <div className="p-4 bg-blue-100 text-blue-600 rounded-full">
-                  <Sparkles className="w-8 h-8" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-800">
-                    {mode === "command"
-                      ? "Block Editor Mode"
-                      : mode === "design"
-                        ? "Component Architect Mode"
-                        : "Full Page Build Mode"}
-                  </h4>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {mode === "command"
-                      ? "Ask to subheadings, change colors, or add existing blocks."
-                      : mode === "design"
-                        ? "Describe a new component to build from scratch (e.g. Testimonial Slider)."
-                        : "Ask for a complete website page. The AI will write the full HTML code."}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] p-3 rounded-2xl text-sm ${
-                    msg.role === "user"
-                      ? "bg-blue-600 text-white rounded-tr-none"
-                      : "bg-white text-gray-700 shadow-sm border border-gray-100 rounded-tl-none"
-                  }`}
-                >
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 rounded-tl-none flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce"></span>
-                  <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-75"></span>
-                  <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-150"></span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 border-t bg-white">
-            <div className="relative">
-              <input
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Ask AI to design..."
-                className="w-full pl-4 pr-12 py-3 bg-gray-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-blue-100 transition"
-              />
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleSend}
-                disabled={!prompt.trim() || isTyping}
-                className="absolute right-2 top-1.5 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition"
-                title="Send message"
+                onClick={() => setIsMinimized((prev) => !prev)}
+                className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1"
+                title={isMinimized ? "Restore chat" : "Minimize chat"}
               >
-                <Send className="w-4 h-4" />
+                <Minus className="w-3.5 h-3.5" />
+                {isMinimized ? "Restore" : "Minimize"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  setIsMinimized(false);
+                }}
+                className="px-2 py-1.5 bg-slate-100 hover:bg-red-500/80 hover:text-white rounded-lg transition text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1"
+                title="Close chat"
+              >
+                <X className="w-3.5 h-3.5" />
+                Close
               </button>
             </div>
           </div>
+
+          {!isMinimized && (
+            <>
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => handleModeChange("command")}
+                    className={modeButtonClass("command")}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Layers className="w-3 h-3" /> Blocks
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleModeChange("design")}
+                    className={modeButtonClass("design")}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Wand2 className="w-3 h-3" /> Component
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleModeChange("full")}
+                    className={modeButtonClass("full")}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <FileCode className="w-3 h-3" /> Full Page
+                    </span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setShowHistory((prev) => !prev)}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
+                  >
+                    <History className="w-3 h-3" />{" "}
+                    {showHistory ? "Hide" : "Show"} History
+                  </button>
+                  <button
+                    onClick={() => void loadSuggestions()}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
+                    title="Generate live suggestions"
+                  >
+                    <Lightbulb className="w-3 h-3" /> Suggestions
+                  </button>
+                  <button
+                    onClick={() => void runComplianceCheck()}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1"
+                    title="Run compliance checks"
+                  >
+                    <ShieldCheck className="w-3 h-3" /> Compliance
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-white border border-slate-200 px-2.5 py-1.5">
+                  <p className="text-[11px] text-slate-600 truncate">
+                    {activeThreadId
+                      ? `Continuing: ${currentThreadTitle || "Previous conversation"}`
+                      : "New conversation"}
+                  </p>
+                  {activeThreadId ? (
+                    <button
+                      onClick={startNewChat}
+                      className="shrink-0 px-2 py-1 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    >
+                      New Chat
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {activeThreadId ? (
+                <div className="px-4 pb-2">
+                  <button
+                    onClick={startNewChat}
+                    className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Start New Chat Instead of Continuing This Thread
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-gray-50">
+                {showHistory && (
+                  <div className="bg-white border border-gray-200 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">
+                      Recent Conversations
+                    </p>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {history.length === 0 ? (
+                        <p className="text-xs text-gray-500">
+                          No saved chats yet.
+                        </p>
+                      ) : (
+                        history.slice(0, 8).map((item) => (
+                          <button
+                            key={item.threadId}
+                            onClick={() =>
+                              void openConversationThread(item.threadId)
+                            }
+                            disabled={openingThreadId === item.threadId}
+                            className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition border ${
+                              activeThreadId === item.threadId
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : "hover:bg-gray-50 text-gray-700 border-gray-200"
+                            }`}
+                          >
+                            <div className="font-semibold truncate">
+                              {item.title}
+                            </div>
+                            {openingThreadId === item.threadId ? (
+                              <div className="text-[10px] mt-1 text-blue-600">
+                                Opening...
+                              </div>
+                            ) : null}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {messages.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
+                    <div className="p-4 bg-blue-100 text-blue-600 rounded-full">
+                      <Sparkles className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-800">
+                        {mode === "command"
+                          ? "Block Editor Mode"
+                          : mode === "design"
+                            ? "Component Architect Mode"
+                            : "Full Page Build Mode"}
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {mode === "command"
+                          ? "Ask to change colors, add blocks, or edit content."
+                          : mode === "design"
+                            ? "Describe a new component to build from scratch."
+                            : "Describe a complete page and AI will generate it."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {suggestions.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-2">
+                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider">
+                      Live Suggestions
+                    </p>
+                    {suggestions.map((item) => (
+                      <div
+                        key={item.id}
+                        className="bg-white rounded-lg border border-amber-100 p-2.5"
+                      >
+                        <p className="text-xs font-semibold text-gray-700">
+                          {item.title}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">
+                            {item.impact} impact
+                          </span>
+                          <button
+                            onClick={() => void applySuggestion(item.operation)}
+                            className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {complianceScore !== null && (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                      Compliance Score
+                    </p>
+                    <p className="text-lg font-black text-emerald-800">
+                      {complianceScore}%
+                    </p>
+                  </div>
+                )}
+
+                {messages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[85%] p-3 rounded-xl text-sm whitespace-pre-wrap ${
+                        msg.role === "user"
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-gray-700 shadow-sm border border-gray-200"
+                      }`}
+                    >
+                      {msg.content}
+                      {msg.imageUrl ? (
+                        <div className="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                          <img
+                            src={msg.imageUrl}
+                            alt="AI generated"
+                            className="block w-full max-w-full"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 rounded-tl-none flex gap-1">
+                      <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce"></span>
+                      <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-75"></span>
+                      <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce delay-150"></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t bg-white">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    placeholder="Ask AI to design..."
+                    className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-100 transition"
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={!prompt.trim() || isTyping}
+                    className="absolute right-2 top-1.5 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    Model
+                  </label>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="text-[11px] bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700"
+                    title="Select AI model"
+                  >
+                    <option value="llama-3.3-70b-versatile">
+                      Llama 3.3 70B
+                    </option>
+                    <option value="claude-3-5-sonnet-20241022">
+                      Claude 3.5 Sonnet
+                    </option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                  </select>
+                  {isLoadingSuggestions && (
+                    <span className="text-[10px] text-gray-500 font-semibold">
+                      Loading suggestions...
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={handleToggleOpen}
           className="bg-blue-600 text-white p-3.5 rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2 group border border-blue-500/40"
           title="Open AI Assistant"
         >

@@ -27,6 +27,7 @@ export {
   Sidebar,
   Divider,
   Stack,
+  GridSection,
   Gallery,
   Testimonial,
   Timeline,

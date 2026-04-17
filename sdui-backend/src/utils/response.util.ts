@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Response } from "express";
 
 interface SuccessResponse {
   success: true;
@@ -19,7 +19,7 @@ export const sendSuccess = (
   res: Response,
   data?: any,
   message?: string,
-  statusCode: number = 200
+  statusCode: number = 200,
 ): Response => {
   const response: SuccessResponse = {
     success: true,
@@ -41,8 +41,15 @@ export const sendError = (
   message: string,
   statusCode: number = 500,
   code?: string,
-  details?: any
+  details?: any,
 ): Response => {
+  const normalizedDetails =
+    code === "VALIDATION_ERROR" && details && !Array.isArray(details)
+      ? typeof details === "string"
+        ? [{ field: "general", message: details }]
+        : [{ field: "general", message: "Validation failed", details }]
+      : details;
+
   const response: ErrorResponse = {
     success: false,
     error: {
@@ -54,8 +61,8 @@ export const sendError = (
     response.error.code = code;
   }
 
-  if (details) {
-    response.error.details = details;
+  if (normalizedDetails) {
+    response.error.details = normalizedDetails;
   }
 
   return res.status(statusCode).json(response);

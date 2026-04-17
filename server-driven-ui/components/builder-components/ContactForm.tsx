@@ -4,6 +4,8 @@ import React from "react";
 import { useNode } from "@craftjs/core";
 import { Send, MapPin, Phone, Mail } from "lucide-react";
 import Button from "../ui/Button";
+import CountryCodeSelect from "../ui/CountryCodeSelect";
+import { submitPublicForm, testPublicEmailDelivery } from "@/lib/api/forms.api";
 
 interface ContactFormProps {
   title?: string;
@@ -11,6 +13,10 @@ interface ContactFormProps {
   address?: string;
   phone?: string;
   email?: string;
+  recipientEmail?: string;
+  formSubject?: string;
+  submitButtonText?: string;
+  successMessage?: string;
   backgroundColor?: string;
   width?: string;
   minHeight?: string;
@@ -35,6 +41,10 @@ export const ContactForm = ({
   address = "123 Education Lane, Academic City, State 45678",
   phone = "+91 1234567890",
   email = "info@institution.edu.in",
+  recipientEmail,
+  formSubject = "New contact form submission",
+  submitButtonText = "Send Message",
+  successMessage = "Thanks! Your message has been sent.",
   backgroundColor = "#ffffff",
   width = "100%",
   minHeight = "auto",
@@ -62,6 +72,79 @@ export const ContactForm = ({
   const margin = `${marginTop} ${marginRight} ${marginBottom} ${marginLeft}`;
   const isAbsolute = positionMode === "absolute";
   const parsedZIndex = Number.parseInt(zIndex, 10);
+  const [firstName, setFirstName] = React.useState("");
+  const [lastName, setLastName] = React.useState("");
+  const [senderEmail, setSenderEmail] = React.useState("");
+  const [countryCode, setCountryCode] = React.useState("");
+  const [senderPhone, setSenderPhone] = React.useState("");
+  const [subject, setSubject] = React.useState("Admission Inquiry");
+  const [message, setMessage] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitResult, setSubmitResult] = React.useState<
+    "idle" | "success" | "error"
+  >("idle");
+  const [resultText, setResultText] = React.useState("");
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      !senderEmail.trim() ||
+      !countryCode.trim() ||
+      !message.trim() ||
+      !/^\d{10}$/.test(senderPhone.trim())
+    ) {
+      setSubmitResult("error");
+      setResultText(
+        "Please select country, enter a valid email, and a 10-digit phone number.",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitResult("idle");
+    setResultText("");
+
+    try {
+      const result = await submitPublicForm({
+        formType: "contact",
+        recipientEmail: (recipientEmail || email).trim(),
+        subject: formSubject,
+        pageUrl: typeof window !== "undefined" ? window.location.href : "",
+        fields: {
+          firstName,
+          lastName,
+          email: senderEmail,
+          countryCode,
+          phone: senderPhone,
+          inquirySubject: subject,
+          message,
+        },
+      });
+
+      setSubmitResult("success");
+      setResultText(
+        result.emailDelivered
+          ? successMessage
+          : result.message ||
+              "Form submitted successfully, but email delivery is currently unavailable.",
+      );
+      setFirstName("");
+      setLastName("");
+      setSenderEmail("");
+      setCountryCode("");
+      setSenderPhone("");
+      setSubject("Admission Inquiry");
+      setMessage("");
+    } catch (error: unknown) {
+      const errorMessage =
+        (error as any)?.response?.data?.error?.message ||
+        "Could not submit form right now. Please try again.";
+      setSubmitResult("error");
+      setResultText(errorMessage);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <>
@@ -129,7 +212,7 @@ export const ContactForm = ({
           </div>
 
           <div className="bg-gray-50 p-8 rounded-3xl shadow-sm border border-gray-100">
-            <form className="space-y-5">
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
@@ -140,6 +223,8 @@ export const ContactForm = ({
                     title="First name"
                     className="w-full px-4 py-3 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition bg-white"
                     placeholder="John"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
                   />
                 </div>
                 <div>
@@ -151,6 +236,8 @@ export const ContactForm = ({
                     title="Last name"
                     className="w-full px-4 py-3 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition bg-white"
                     placeholder="Doe"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
               </div>
@@ -164,7 +251,40 @@ export const ContactForm = ({
                   title="Email address"
                   className="w-full px-4 py-3 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition bg-white"
                   placeholder="john@example.com"
+                  required
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                  Mobile Number
+                </label>
+                <div className="grid grid-cols-3 gap-2 items-stretch">
+                  <CountryCodeSelect
+                    title="Country code"
+                    className="col-span-1"
+                    value={countryCode}
+                    onChange={setCountryCode}
+                  />
+                  <input
+                    type="tel"
+                    title="Phone number"
+                    className="col-span-2 px-4 py-3 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition bg-white"
+                    placeholder="9876543210"
+                    required
+                    pattern="[0-9]{10}"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={senderPhone}
+                    onChange={(e) =>
+                      setSenderPhone(
+                        e.target.value.replace(/\D/g, "").slice(0, 10),
+                      )
+                    }
+                  />
+                </div>
               </div>
 
               <div>
@@ -174,6 +294,8 @@ export const ContactForm = ({
                 <select
                   title="Select subject"
                   className="w-full px-4 py-3 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition bg-white"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
                 >
                   <option>Admission Inquiry</option>
                   <option>Campus Visit</option>
@@ -191,15 +313,28 @@ export const ContactForm = ({
                   title="Message"
                   className="w-full px-4 py-3 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition bg-white"
                   placeholder="How can we help you?"
+                  required
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
                 ></textarea>
               </div>
+
+              {submitResult !== "idle" && (
+                <p
+                  className={`text-sm ${submitResult === "success" ? "text-green-600" : "text-red-600"}`}
+                >
+                  {resultText}
+                </p>
+              )}
 
               <Button
                 size="lg"
                 className="w-full gap-2 rounded-xl h-14 translate-y-2"
+                type="submit"
+                disabled={submitting}
               >
                 <Send className="w-4 h-4" />
-                Send Message
+                {submitting ? "Sending..." : submitButtonText}
               </Button>
             </form>
           </div>
@@ -214,6 +349,51 @@ export const ContactFormSettings = () => {
     actions: { setProp },
     props,
   } = useNode((node) => ({ props: node.data.props }));
+  const [testingEmail, setTestingEmail] = React.useState(false);
+  const [testStatus, setTestStatus] = React.useState<
+    "idle" | "success" | "warning" | "error"
+  >("idle");
+  const [testMessage, setTestMessage] = React.useState("");
+
+  const runEmailTest = async () => {
+    const recipient = (props.recipientEmail ?? props.email ?? "").trim();
+    if (!recipient) {
+      setTestStatus("error");
+      setTestMessage("Please enter recipient email first.");
+      return;
+    }
+
+    setTestingEmail(true);
+    setTestStatus("idle");
+    setTestMessage("");
+
+    try {
+      const result = await testPublicEmailDelivery(
+        recipient,
+        "SDUI Contact Form Delivery Test",
+      );
+      if (result.delivered) {
+        setTestStatus("success");
+        setTestMessage(
+          result.message ||
+            `Test email sent via ${result.provider || "configured provider"}.`,
+        );
+      } else {
+        setTestStatus("warning");
+        setTestMessage(
+          "Email service is not configured in backend .env. Add Resend or SMTP values and restart backend.",
+        );
+      }
+    } catch (error: unknown) {
+      const message =
+        (error as any)?.response?.data?.error?.message ||
+        "Email test failed. Check backend email configuration.";
+      setTestStatus("error");
+      setTestMessage(message);
+    } finally {
+      setTestingEmail(false);
+    }
+  };
 
   const spacingOptions = [
     "0px",
@@ -262,6 +442,88 @@ export const ContactFormSettings = () => {
             title="Contact form email"
             value={props.email ?? ""}
             onChange={(e) => setProp((p: any) => (p.email = e.target.value))}
+            className="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Phone</label>
+          <input
+            type="text"
+            title="Contact form phone"
+            value={props.phone ?? ""}
+            onChange={(e) => setProp((p: any) => (p.phone = e.target.value))}
+            className="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Address</label>
+          <textarea
+            title="Contact form address"
+            value={props.address ?? ""}
+            onChange={(e) => setProp((p: any) => (p.address = e.target.value))}
+            className="w-full px-3 py-2 border rounded"
+            rows={2}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Recipient Email (for submissions)
+          </label>
+          <input
+            type="text"
+            title="Contact form recipient email"
+            value={props.recipientEmail ?? props.email ?? ""}
+            onChange={(e) =>
+              setProp((p: any) => (p.recipientEmail = e.target.value))
+            }
+            className="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        <div className="space-y-2">
+          <button
+            type="button"
+            title="Test recipient email delivery"
+            onClick={runEmailTest}
+            disabled={testingEmail}
+            className="w-full px-3 py-2 rounded bg-slate-900 text-white text-sm font-medium disabled:opacity-60"
+          >
+            {testingEmail ? "Testing..." : "Test Recipient Email"}
+          </button>
+          {testStatus !== "idle" && (
+            <p
+              className={`text-xs ${
+                testStatus === "success"
+                  ? "text-green-600"
+                  : testStatus === "warning"
+                    ? "text-amber-600"
+                    : "text-red-600"
+              }`}
+            >
+              {testMessage}
+            </p>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Form Subject</label>
+          <input
+            type="text"
+            title="Contact form subject"
+            value={props.formSubject ?? "New contact form submission"}
+            onChange={(e) =>
+              setProp((p: any) => (p.formSubject = e.target.value))
+            }
+            className="w-full px-3 py-2 border rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Button Text</label>
+          <input
+            type="text"
+            title="Contact form button text"
+            value={props.submitButtonText ?? "Send Message"}
+            onChange={(e) =>
+              setProp((p: any) => (p.submitButtonText = e.target.value))
+            }
             className="w-full px-3 py-2 border rounded"
           />
         </div>
@@ -500,6 +762,10 @@ ContactForm.craft = {
     address: "123 Education Lane, Academic City, State 45678",
     phone: "+91 1234567890",
     email: "info@institution.edu.in",
+    recipientEmail: "info@institution.edu.in",
+    formSubject: "New contact form submission",
+    submitButtonText: "Send Message",
+    successMessage: "Thanks! Your message has been sent.",
     backgroundColor: "#ffffff",
     width: "100%",
     minHeight: "auto",

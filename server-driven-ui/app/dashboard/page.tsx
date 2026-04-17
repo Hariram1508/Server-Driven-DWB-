@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/AuthContext";
 import * as pagesApi from "@/lib/api/pages.api";
-import { planSite, generatePageHTML } from "@/lib/api/ai.api";
+import {
+  planSite,
+  generatePageHTML,
+  getUsageSummary,
+  runNlpBenchmark,
+} from "@/lib/api/ai.api";
 import { Page } from "@/lib/types/page.types";
 import { toast } from "sonner";
 import {
@@ -49,6 +54,17 @@ type BuildStatus = "pending" | "building" | "done" | "error";
 interface PageBuildState extends SitePage {
   status: BuildStatus;
   error?: string;
+}
+
+interface AIUsageSummary {
+  overview?: {
+    totalCostUsd: number;
+    totalRequests: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    cacheHits: number;
+  };
+  byFeature?: Array<{ feature: string; requests: number; costUsd: number }>;
 }
 
 // ── FULL-SITE BUILDER MODAL ───────────────────────────────────────────────────
@@ -832,6 +848,9 @@ export default function DashboardPage() {
   const [renamePageTarget, setRenamePageTarget] = useState<Page | null>(null);
   const [savingRename, setSavingRename] = useState(false);
   const [busyPageId, setBusyPageId] = useState<string | null>(null);
+  const [usageSummary, setUsageSummary] = useState<AIUsageSummary | null>(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+  const [runningBenchmark, setRunningBenchmark] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
@@ -863,6 +882,23 @@ export default function DashboardPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const fetchUsage = async () => {
+      if (user?.role !== "super-admin") return;
+      setLoadingUsage(true);
+      try {
+        const summary = await getUsageSummary();
+        setUsageSummary(summary?.data ?? summary ?? null);
+      } catch (error) {
+        console.error("Failed to fetch AI usage summary:", error);
+      } finally {
+        setLoadingUsage(false);
+      }
+    };
+
+    void fetchUsage();
+  }, [user?.role]);
 
   const handleCreatePage = async (
     name: string,
@@ -960,6 +996,22 @@ export default function DashboardPage() {
       toast.error("Failed to delete page.");
     } finally {
       setBusyPageId(null);
+    }
+  };
+
+  const handleRunBenchmark = async () => {
+    setRunningBenchmark(true);
+    try {
+      const result = await runNlpBenchmark();
+      const accuracy = result?.data?.accuracy ?? result?.accuracy;
+      toast.success(`NLP benchmark completed: ${accuracy}% accuracy`);
+
+      const summary = await getUsageSummary();
+      setUsageSummary(summary?.data ?? summary ?? null);
+    } catch {
+      toast.error("Failed to run benchmark");
+    } finally {
+      setRunningBenchmark(false);
     }
   };
 
@@ -1080,6 +1132,63 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+
+            {user?.role === "super-admin" && (
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">
+                    AI Cost Monitor
+                  </h3>
+                  <Bot className="w-4 h-4 text-blue-500" />
+                </div>
+
+                {loadingUsage ? (
+                  <div className="py-6 text-center text-xs font-semibold text-gray-500">
+                    Loading usage...
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-gray-50 rounded-xl">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                        30-Day Cost
+                      </p>
+                      <p className="text-2xl font-black text-gray-900">
+                        $
+                        {usageSummary?.overview?.totalCostUsd?.toFixed(2) ||
+                          "0.00"}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-3 bg-gray-50 rounded-xl">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                          Requests
+                        </p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {usageSummary?.overview?.totalRequests || 0}
+                        </p>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-xl">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                          Cache Hits
+                        </p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {usageSummary?.overview?.cacheHits || 0}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleRunBenchmark}
+                      disabled={runningBenchmark}
+                      className="w-full h-10 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest transition"
+                    >
+                      {runningBenchmark
+                        ? "Running Benchmark..."
+                        : "Run NLP Benchmark"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* AI Site Builder Card */}
             <div className="bg-gradient-to-br from-blue-600 to-violet-700 p-8 rounded-[2.5rem] shadow-2xl text-white relative overflow-hidden group">

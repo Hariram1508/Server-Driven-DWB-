@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useNode } from "@craftjs/core";
+import { useEditor } from "@craftjs/core";
 import { SafeHTMLRenderer } from "../editor/SafeHTMLRenderer";
 
 interface RawHTMLProps {
@@ -11,6 +12,13 @@ interface RawHTMLProps {
 export const RawHTML = ({
   html = '<div class="p-10 bg-gray-100 rounded-xl text-center"><h3>Custom HTML Section</h3><p>Edit the code in the settings panel</p></div>',
 }: RawHTMLProps) => {
+  const { enabled } = useEditor((state) => ({
+    enabled: state.options.enabled,
+  }));
+  const { selected } = useNode((node) => ({
+    selected: node.events.selected,
+  }));
+
   const {
     connectors: { connect, drag },
   } = useNode();
@@ -22,9 +30,24 @@ export const RawHTML = ({
           connect(drag(ref));
         }
       }}
-      className="w-full"
+      className="relative w-full"
     >
-      <SafeHTMLRenderer html={html} className="w-full min-h-125 rounded-lg" />
+      <SafeHTMLRenderer
+        html={html}
+        className={`w-full min-h-125 rounded-lg ${enabled ? "pointer-events-none" : ""}`}
+      />
+
+      {enabled && (
+        <div
+          className={`absolute inset-0 rounded-lg border-2 border-dashed transition pointer-events-none ${
+            selected ? "border-blue-500 bg-blue-500/5" : "border-transparent"
+          }`}
+        >
+          <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-black/70 text-white text-[10px] font-semibold">
+            HTML Block · Click to edit settings
+          </div>
+        </div>
+      )}
     </div>
   );
 };

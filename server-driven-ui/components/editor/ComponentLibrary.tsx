@@ -52,6 +52,7 @@ import {
   FacultyProfile,
   FeedbackForm,
   Footer,
+  GridSection,
   Gallery,
   InquiryForm,
   Modal,
@@ -332,6 +333,13 @@ export const ComponentLibrary = () => {
       icon: <Info className="w-5 h-5 text-cyan-600" />,
       component: <DepartmentCard />,
       description: "Department profile card with summary.",
+    },
+    {
+      category: "Institution",
+      name: "Grid Section",
+      icon: <Layout className="w-5 h-5 text-blue-600" />,
+      component: <GridSection />,
+      description: "Fast card-grid section for highlights and links.",
     },
     {
       category: "Institution",
