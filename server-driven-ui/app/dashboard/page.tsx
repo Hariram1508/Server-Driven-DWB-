@@ -845,6 +845,11 @@ export default function DashboardPage() {
   const [showNewPageModal, setShowNewPageModal] = useState(false);
   const [showSiteBuilder, setShowSiteBuilder] = useState(false);
   const [openActionsFor, setOpenActionsFor] = useState<string | null>(null);
+  const [openActionsUpward, setOpenActionsUpward] = useState(false);
+  const [openActionsPosition, setOpenActionsPosition] = useState({
+    top: 0,
+    left: 0,
+  });
   const [renamePageTarget, setRenamePageTarget] = useState<Page | null>(null);
   const [savingRename, setSavingRename] = useState(false);
   const [busyPageId, setBusyPageId] = useState<string | null>(null);
@@ -911,7 +916,11 @@ export default function DashboardPage() {
         slug,
         useHtml: mode === "ai",
       });
-      setPages([...pages, newPage]);
+      setPages((prev) =>
+        [newPage, ...prev].sort(
+          (a, b) => (b.orderIndex ?? 0) - (a.orderIndex ?? 0),
+        ),
+      );
       toast.success("Page created!");
       setShowNewPageModal(false);
       router.push(mode === "ai" ? `/edit/${slug}?init=ai` : `/edit/${slug}`);
@@ -937,23 +946,47 @@ export default function DashboardPage() {
     }
   };
 
-  const handleMovePage = (pageId: string, direction: "up" | "down") => {
-    setPages((prev) => {
-      const currentIndex = prev.findIndex((p) => p._id === pageId);
-      if (currentIndex < 0) return prev;
+  const handleMovePage = async (pageId: string, direction: "up" | "down") => {
+    const currentIndex = pages.findIndex((p) => p._id === pageId);
+    if (currentIndex < 0) return;
 
-      const targetIndex =
-        direction === "up" ? currentIndex - 1 : currentIndex + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+    const targetIndex =
+      direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= pages.length) return;
 
-      const next = [...prev];
-      [next[currentIndex], next[targetIndex]] = [
-        next[targetIndex],
-        next[currentIndex],
-      ];
-      return next;
-    });
-    setOpenActionsFor(null);
+    const next = [...pages];
+    const currentPage = next[currentIndex];
+    const targetPage = next[targetIndex];
+    const currentOrderIndex =
+      currentPage.orderIndex ?? pages.length - currentIndex;
+    const targetOrderIndex =
+      targetPage.orderIndex ?? pages.length - targetIndex;
+
+    next[currentIndex] = {
+      ...targetPage,
+      orderIndex: currentOrderIndex,
+    };
+    next[targetIndex] = {
+      ...currentPage,
+      orderIndex: targetOrderIndex,
+    };
+
+    setBusyPageId(pageId);
+    try {
+      await Promise.all([
+        pagesApi.updatePage(currentPage._id, { orderIndex: targetOrderIndex }),
+        pagesApi.updatePage(targetPage._id, { orderIndex: currentOrderIndex }),
+      ]);
+
+      const refreshedPages = await pagesApi.getAllPages();
+      setPages(refreshedPages);
+      toast.success("Page order updated.");
+    } catch {
+      toast.error("Failed to move page.");
+    } finally {
+      setBusyPageId(null);
+      setOpenActionsFor(null);
+    }
   };
 
   const handleRenamePage = async (name: string, slug: string) => {
@@ -1034,7 +1067,12 @@ export default function DashboardPage() {
       page.name.toLowerCase().includes(q) || page.slug.toLowerCase().includes(q)
     );
   });
-
+  const firstFilteredPageId = filteredPages[0]?._id ?? null;
+  const lastFilteredPageId =
+    filteredPages[filteredPages.length - 1]?._id ?? null;
+  const activePage = openActionsFor
+    ? (filteredPages.find((page) => page._id === openActionsFor) ?? null)
+    : null;
   return (
     <div className="min-h-screen bg-gray-50/50 flex flex-col">
       {/* Header */}
@@ -1235,143 +1273,109 @@ export default function DashboardPage() {
                     <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto" />
                   </div>
                 ) : filteredPages.length > 0 ? (
-                  filteredPages.map((page, index) => (
-                    <div
-                      key={page._id}
-                      className="p-8 hover:bg-gray-50 transition-all duration-300 group"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                        <div className="flex items-center gap-6">
-                          <div
-                            className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
-                              page.useHtml
-                                ? "bg-blue-50 text-blue-600"
-                                : "bg-violet-50 text-violet-600"
-                            }`}
-                          >
-                            {page.useHtml ? (
-                              <Bot className="w-6 h-6" />
-                            ) : (
-                              <Layout className="w-6 h-6" />
-                            )}
-                          </div>
-                          <div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">
-                              {page.name}
-                            </h3>
-                            <div className="flex items-center gap-3">
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-md ring-1 ring-green-200">
-                                Live
-                              </span>
-                              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                                {page.useHtml ? "AI Build" : "Visual Canvas"}
-                              </span>
-                              <span className="text-xs font-mono text-gray-400">
-                                /{page.slug}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          {canEdit && (
-                            <Link
-                              href={`/edit/${page.slug}`}
-                              className="h-12 px-6 rounded-xl bg-white border border-gray-100 text-gray-900 text-sm font-bold flex items-center gap-2 hover:bg-gray-50 hover:shadow-sm transition-all shadow-xs"
-                            >
-                              <FileEdit className="w-4 h-4 text-blue-600" />
-                              Edit
-                            </Link>
-                          )}
-                          <Link
-                            href={`/${page.slug}`}
-                            className="h-12 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 flex items-center gap-2 text-white text-sm font-bold transition-all shadow-sm hover:shadow-blue-200 hover:-translate-y-0.5"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                            Play
-                          </Link>
-                          {canEdit && (
+                  filteredPages.map((page) => {
+                    return (
+                      <div
+                        key={page._id}
+                        className="p-8 hover:bg-gray-50 transition-all duration-300 group"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                          <div className="flex items-center gap-6">
                             <div
-                              className="relative"
-                              ref={
-                                openActionsFor === page._id
-                                  ? actionsMenuRef
-                                  : null
-                              }
+                              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
+                                page.useHtml
+                                  ? "bg-blue-50 text-blue-600"
+                                  : "bg-violet-50 text-violet-600"
+                              }`}
                             >
-                              <button
-                                onClick={() =>
-                                  setOpenActionsFor((prev) =>
-                                    prev === page._id ? null : page._id,
-                                  )
-                                }
-                                title="Open page actions"
-                                aria-label="Open page actions"
-                                className="h-12 w-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
-                              >
-                                <MoreVertical className="w-5 h-5" />
-                              </button>
-
-                              {openActionsFor === page._id && (
-                                <div className="absolute right-0 top-14 w-56 rounded-2xl border border-gray-100 bg-white shadow-[0_25px_55px_-12px_rgba(0,0,0,0.25)] p-2 z-30 animate-in fade-in slide-in-from-top-1 duration-150">
-                                  <button
-                                    onClick={() => {
-                                      router.push(`/edit/${page.slug}`);
-                                      setOpenActionsFor(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
-                                  >
-                                    <FileEdit className="w-4 h-4 text-blue-600" />
-                                    Open Editor
-                                  </button>
-                                  <button
-                                    onClick={() => setRenamePageTarget(page)}
-                                    className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
-                                  >
-                                    <Pencil className="w-4 h-4 text-violet-600" />
-                                    Rename Page
-                                  </button>
-                                  <button
-                                    disabled={index === 0}
-                                    onClick={() =>
-                                      handleMovePage(page._id, "up")
-                                    }
-                                    className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                                  >
-                                    <ArrowUp className="w-4 h-4 text-sky-600" />
-                                    Move Up
-                                  </button>
-                                  <button
-                                    disabled={
-                                      index === filteredPages.length - 1
-                                    }
-                                    onClick={() =>
-                                      handleMovePage(page._id, "down")
-                                    }
-                                    className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                                  >
-                                    <ArrowDown className="w-4 h-4 text-sky-600" />
-                                    Move Down
-                                  </button>
-                                  <div className="my-1 h-px bg-gray-100" />
-                                  <button
-                                    disabled={busyPageId === page._id}
-                                    onClick={() => handleDeletePage(page)}
-                                    className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                    {busyPageId === page._id
-                                      ? "Deleting…"
-                                      : "Delete Page"}
-                                  </button>
-                                </div>
+                              {page.useHtml ? (
+                                <Bot className="w-6 h-6" />
+                              ) : (
+                                <Layout className="w-6 h-6" />
                               )}
                             </div>
-                          )}
+                            <div>
+                              <h3 className="text-xl font-bold text-gray-900 mb-1">
+                                {page.name}
+                              </h3>
+                              <div className="flex items-center gap-3">
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-md ring-1 ring-green-200">
+                                  Live
+                                </span>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                  {page.useHtml ? "AI Build" : "Visual Canvas"}
+                                </span>
+                                <span className="text-xs font-mono text-gray-400">
+                                  /{page.slug}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {canEdit && (
+                              <Link
+                                href={`/edit/${page.slug}`}
+                                className="h-12 px-6 rounded-xl bg-white border border-gray-100 text-gray-900 text-sm font-bold flex items-center gap-2 hover:bg-gray-50 hover:shadow-sm transition-all shadow-xs"
+                              >
+                                <FileEdit className="w-4 h-4 text-blue-600" />
+                                Edit
+                              </Link>
+                            )}
+                            <Link
+                              href={`/${page.slug}`}
+                              className="h-12 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 flex items-center gap-2 text-white text-sm font-bold transition-all shadow-sm hover:shadow-blue-200 hover:-translate-y-0.5"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                              Play
+                            </Link>
+                            {canEdit && (
+                              <div className="relative">
+                                <button
+                                  onClick={(event) => {
+                                    if (openActionsFor === page._id) {
+                                      setOpenActionsFor(null);
+                                      return;
+                                    }
+
+                                    const buttonRect =
+                                      event.currentTarget.getBoundingClientRect();
+                                    const estimatedMenuHeight = 260;
+                                    const spaceBelow =
+                                      window.innerHeight - buttonRect.bottom;
+                                    const spaceAbove = buttonRect.top;
+                                    const menuWidth = 224;
+                                    const left = Math.min(
+                                      Math.max(
+                                        16,
+                                        buttonRect.right - menuWidth,
+                                      ),
+                                      window.innerWidth - menuWidth - 16,
+                                    );
+
+                                    setOpenActionsUpward(
+                                      spaceBelow < estimatedMenuHeight &&
+                                        spaceAbove > spaceBelow,
+                                    );
+                                    setOpenActionsPosition({
+                                      top: buttonRect.bottom + 12,
+                                      left,
+                                    });
+                                    setOpenActionsFor(page._id);
+                                  }}
+                                  title="Open page actions"
+                                  aria-label="Open page actions"
+                                  className="h-12 w-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
+                                >
+                                  <MoreVertical className="w-5 h-5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-20 text-center">
                     <Globe className="w-12 h-12 text-gray-100 mx-auto mb-6" />
@@ -1408,6 +1412,64 @@ export default function DashboardPage() {
         onSave={handleRenamePage}
         saving={savingRename}
       />
+
+      {openActionsFor && activePage && (
+        <div
+          ref={actionsMenuRef}
+          className={`fixed z-[9999] w-56 rounded-2xl border border-gray-100 bg-white shadow-[0_25px_55px_-12px_rgba(0,0,0,0.25)] p-2 animate-in fade-in duration-150 ${
+            openActionsUpward ? "slide-in-from-bottom-1" : "slide-in-from-top-1"
+          }`}
+          style={{
+            left: `${openActionsPosition.left}px`,
+            top: openActionsUpward
+              ? `${Math.max(16, openActionsPosition.top - 280)}px`
+              : `${openActionsPosition.top}px`,
+          }}
+        >
+          <button
+            onClick={() => {
+              router.push(`/edit/${activePage.slug}`);
+              setOpenActionsFor(null);
+            }}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+          >
+            <FileEdit className="w-4 h-4 text-blue-600" />
+            Open Editor
+          </button>
+          <button
+            onClick={() => setRenamePageTarget(activePage)}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+          >
+            <Pencil className="w-4 h-4 text-violet-600" />
+            Rename Page
+          </button>
+          <button
+            disabled={activePage._id === firstFilteredPageId}
+            onClick={() => handleMovePage(activePage._id, "up")}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ArrowUp className="w-4 h-4 text-sky-600" />
+            Move Up
+          </button>
+          <button
+            disabled={activePage._id === lastFilteredPageId}
+            onClick={() => handleMovePage(activePage._id, "down")}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ArrowDown className="w-4 h-4 text-sky-600" />
+            Move Down
+          </button>
+          <div className="my-1 h-px bg-gray-100" />
+          <button
+            disabled={busyPageId === activePage._id}
+            onClick={() => handleDeletePage(activePage)}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-4 h-4" />
+            {busyPageId === activePage._id ? "Deleting…" : "Delete Page"}
+          </button>
+        </div>
+      )}
 
       <FullSiteBuilderModal
         isOpen={showSiteBuilder}

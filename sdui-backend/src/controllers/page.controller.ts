@@ -53,13 +53,21 @@ export class PageController {
     }
 
     const { id } = req.params;
-    const { name, slug, jsonConfig, htmlContent, useHtml, changes } = req.body;
+    const {
+      name,
+      slug,
+      jsonConfig,
+      htmlContent,
+      useHtml,
+      orderIndex,
+      changes,
+    } = req.body;
 
     const page = await pageService.updatePage(
       id,
       req.user.institutionId,
       req.user.userId,
-      { name, slug, jsonConfig, htmlContent, useHtml },
+      { name, slug, jsonConfig, htmlContent, useHtml, orderIndex },
       changes,
     );
 

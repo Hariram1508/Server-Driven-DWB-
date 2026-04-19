@@ -27,6 +27,7 @@ export interface Page {
   useHtml: boolean;
   isPublished: boolean;
   version: string;
+  orderIndex?: number;
   createdAt: string;
   updatedAt: string;
   updatedBy: {
@@ -48,5 +49,6 @@ export interface UpdatePageData {
   jsonConfig?: PageJSON;
   htmlContent?: string;
   useHtml?: boolean;
+  orderIndex?: number;
   changes?: string;
 }

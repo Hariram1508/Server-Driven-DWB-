@@ -61,6 +61,7 @@ router.put(
     body("jsonConfig").optional(),
     body("htmlContent").optional(),
     body("useHtml").optional().isBoolean(),
+    body("orderIndex").optional().isInt(),
   ]),
   pageController.updatePage,
 );

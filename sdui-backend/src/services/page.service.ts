@@ -6,9 +6,35 @@ import { PageJSON } from "../types/page.types";
 export class PageService {
   // Get all pages for an institution
   async getAllPages(institutionId: string): Promise<IPage[]> {
-    return Page.find({ institutionId })
-      .sort({ updatedAt: -1 })
+    const pages = await Page.find({ institutionId })
+      .sort({ orderIndex: -1, updatedAt: -1 })
       .populate("updatedBy", "name email");
+
+    const needsBackfill = pages.some(
+      (page) => typeof page.orderIndex !== "number" || page.orderIndex <= 0,
+    );
+
+    if (needsBackfill) {
+      const totalPages = pages.length;
+
+      await Promise.all(
+        pages.map(async (page, index) => {
+          const desiredOrderIndex = totalPages - index;
+          if (page.orderIndex === desiredOrderIndex) {
+            return;
+          }
+
+          page.orderIndex = desiredOrderIndex;
+          await page.save();
+        }),
+      );
+
+      return Page.find({ institutionId })
+        .sort({ orderIndex: -1, updatedAt: -1 })
+        .populate("updatedBy", "name email");
+    }
+
+    return pages;
   }
 
   // Get page by ID
@@ -58,6 +84,15 @@ export class PageService {
       );
     }
 
+    const highestOrderPage = await Page.findOne({
+      institutionId: data.institutionId,
+    })
+      .sort({ orderIndex: -1, updatedAt: -1 })
+      .select("orderIndex")
+      .lean();
+
+    const nextOrderIndex = (highestOrderPage?.orderIndex ?? 0) + 1;
+
     // Create page with default config
     const page = await Page.create({
       institutionId: data.institutionId,
@@ -83,6 +118,7 @@ export class PageService {
       },
       useHtml: !!data.useHtml,
       isPublished: true,
+      orderIndex: nextOrderIndex,
       updatedBy: data.userId,
     });
 
@@ -109,6 +145,7 @@ export class PageService {
       jsonConfig?: PageJSON;
       htmlContent?: string;
       useHtml?: boolean;
+      orderIndex?: number;
     },
     changes?: string,
   ): Promise<IPage> {
@@ -140,6 +177,7 @@ export class PageService {
     if (data.jsonConfig) page.jsonConfig = data.jsonConfig;
     if (data.htmlContent !== undefined) page.htmlContent = data.htmlContent;
     if (data.useHtml !== undefined) page.useHtml = data.useHtml;
+    if (data.orderIndex !== undefined) page.orderIndex = data.orderIndex;
 
     page.updatedBy = userId as any;
     await page.save();
@@ -242,6 +280,13 @@ export class PageService {
       slug: newSlug,
       jsonConfig: originalPage.jsonConfig,
       isPublished: false,
+      orderIndex:
+        ((
+          await Page.findOne({ institutionId })
+            .sort({ orderIndex: -1, updatedAt: -1 })
+            .select("orderIndex")
+            .lean()
+        )?.orderIndex ?? 0) + 1,
       updatedBy: userId,
     });
 
@@ -264,7 +309,7 @@ export class PageService {
       : { isPublished: true };
     return Page.find(query)
       .select("name slug jsonConfig htmlContent useHtml institutionId")
-      .sort({ updatedAt: -1 });
+      .sort({ orderIndex: -1, updatedAt: -1 });
   }
 
   // Get published page by slug (public)
