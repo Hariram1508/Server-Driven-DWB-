@@ -125,6 +125,36 @@ export class AIService {
     error?: string;
   }> {
     try {
+      const lowerCommand = command.toLowerCase();
+      const isSpacerRequest =
+        /\b(spacer|blank\s+space|empty\s+space|whitespace|gap|vertical\s+space|space\s+only)\b/i.test(
+          lowerCommand,
+        );
+
+      if (isSpacerRequest) {
+        const heightMatch = lowerCommand.match(
+          /(\d+(?:\.\d+)?)(px|rem|em|vh|vw|%)?/i,
+        );
+        const height = heightMatch
+          ? `${heightMatch[1]}${heightMatch[2] || "px"}`
+          : "32px";
+
+        return {
+          success: true,
+          operation: {
+            action: "insert",
+            component: {
+              type: "Spacer",
+              props: {
+                height,
+                backgroundColor: "transparent",
+              },
+              position: "append",
+            },
+          },
+        };
+      }
+
       const compactContext = this.buildCompactCommandContext(context);
       const prompt = `You are an AI assistant for a website builder.
     
@@ -149,7 +179,7 @@ Response format:
 }
 
 VALID COMPONENT TYPES (only use these for insert/update): 
-HeroBanner, TextBlock, Container, AboutSection, Statistics, FacultyGrid, FAQAccordion, ContactForm, FeedbackForm, Image, DynamicSection, Button, RawHTML.
+HeroBanner, TextBlock, Spacer, Container, AboutSection, Statistics, FacultyGrid, FAQAccordion, ContactForm, FeedbackForm, Image, DynamicSection, Button, RawHTML.
 CRITICAL: If the user says "full", "website", or "html page", DO NOT use "insert". USE "generate_full_html".
 
 Only respond with valid JSON, no explanations.`;
@@ -159,7 +189,6 @@ Only respond with valid JSON, no explanations.`;
       const jsonOperation = JSON.parse(responseText);
 
       // Validation: If it seems like a full page request, convert it to generate_full_html
-      const lowerCommand = command.toLowerCase();
       const isFullPageRequest = lowerCommand.match(
         /full|website|template|landing|college|university|hospital|school/,
       );
@@ -178,6 +207,7 @@ Only respond with valid JSON, no explanations.`;
         ![
           "HeroBanner",
           "TextBlock",
+          "Spacer",
           "Container",
           "AboutSection",
           "Statistics",
@@ -1350,6 +1380,45 @@ ${cleanHtml}
     return response.choices[0].message.content || "";
   }
 
+  private getErrorMessage(error: unknown): string {
+    if (!error) return "Unknown AI provider error";
+    if (typeof error === "string") return error;
+    if (error instanceof Error) return error.message;
+
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === "string") {
+      return maybeMessage;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown AI provider error";
+    }
+  }
+
+  private buildChatFallbackReply(errorMessage: string): string {
+    const normalized = errorMessage.toLowerCase();
+
+    if (
+      /policy|safety|unsafe|disallowed|not allowed|violent|hate|extrem|refus/.test(
+        normalized,
+      )
+    ) {
+      return "I can still help with the UI action safely. For your case, I can add an empty text component at the bottom without generating any paragraph content.";
+    }
+
+    if (/rate limit|quota|too many requests|daily limit/.test(normalized)) {
+      return "The AI provider is rate-limited right now. Please retry in a moment, or switch to another model from the dropdown.";
+    }
+
+    if (/timeout|timed out|network|unavailable|503|502|500/.test(normalized)) {
+      return "The AI provider is temporarily unavailable. Please retry, or switch to another model from the dropdown.";
+    }
+
+    return "I hit an AI provider error for this message. I can still continue with UI commands like adding an empty text component at the bottom.";
+  }
+
   async runTrackedPrompt(options: {
     prompt: string;
     institutionId: string;
@@ -1517,16 +1586,43 @@ ${historyBlock || "(none)"}
 Latest user message:
 ${message}`;
 
-    const tracked = await this.runTrackedPrompt({
-      prompt,
-      institutionId,
-      userId,
-      feature: "chat-memory",
-      requestedModel,
-      jsonMode: false,
-      useCache: false,
-      metadata: { threadId },
-    });
+    let tracked:
+      | {
+          text: string;
+          model: string;
+          provider: "anthropic" | "groq" | "openai";
+          cacheHit: boolean;
+          latencyMs: number;
+          usageId: string;
+        }
+      | undefined;
+
+    try {
+      tracked = await this.runTrackedPrompt({
+        prompt,
+        institutionId,
+        userId,
+        feature: "chat-memory",
+        requestedModel,
+        jsonMode: false,
+        useCache: false,
+        metadata: { threadId },
+      });
+    } catch (error) {
+      const { model, provider } = this.resolveModel(requestedModel);
+      const fallbackText = this.buildChatFallbackReply(
+        this.getErrorMessage(error),
+      );
+
+      tracked = {
+        text: fallbackText,
+        model,
+        provider,
+        cacheHit: false,
+        latencyMs: 0,
+        usageId: `fallback-${randomUUID()}`,
+      };
+    }
 
     const now = new Date();
     const updated = await AIConversation.findOneAndUpdate(

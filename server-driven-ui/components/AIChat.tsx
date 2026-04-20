@@ -35,9 +35,113 @@ const isImageRequest = (text: string) =>
 
 const isComponentPlacementRequest = (text: string) =>
   /\b(add|insert|place|put|move|attach|drop)\b/i.test(text) &&
-  /\b(component|form|button|section|card|banner|hero|footer|header|grid|faq|feedback|contact|image)\b/i.test(
+  /\b(component|form|button|section|card|banner|hero|footer|header|grid|faq|feedback|contact|image|text|paragraph|textblock|spacer|space|blank|gap|whitespace)\b/i.test(
     text,
   );
+
+const shouldForceEmptyTextComponent = (message: string, type: unknown) => {
+  const normalizedMessage = message.toLowerCase();
+  const normalizedType = String(type || "").toLowerCase();
+  const isTextType =
+    normalizedType.includes("text") || normalizedType.includes("paragraph");
+
+  if (!isTextType) {
+    return false;
+  }
+
+  return /\b(empty|blank|without|no\s+text|no\s+content|do\s*not\s+write|don't\s+write|only\s+component|component\s+only)\b/i.test(
+    normalizedMessage,
+  );
+};
+
+const buildEmptyTextProps = (input: Record<string, any> = {}) => ({
+  ...input,
+  content: "",
+  text: "",
+  title: "",
+  subtitle: "",
+  description: "",
+  body: "",
+  html: "",
+});
+
+const isElementLikeObject = (value: unknown): value is Record<string, any> =>
+  Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "type" in (value as Record<string, any>) &&
+    "props" in (value as Record<string, any>),
+  );
+
+const extractRenderableText = (value: unknown): string => {
+  if (value == null) return "";
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => extractRenderableText(item))
+      .join(" ")
+      .trim();
+  }
+
+  if (isElementLikeObject(value)) {
+    return extractRenderableText(value.props?.children);
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferredKeys = [
+      "text",
+      "content",
+      "description",
+      "title",
+      "label",
+      "children",
+    ];
+
+    for (const key of preferredKeys) {
+      if (key in record) {
+        const text = extractRenderableText(record[key]);
+        if (text) return text;
+      }
+    }
+  }
+
+  return "";
+};
+
+const sanitizeAiComponentProps = (input: Record<string, any> = {}) => {
+  const sanitized: Record<string, any> = { ...input };
+
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (isElementLikeObject(value)) {
+      sanitized[key] = extractRenderableText(value);
+      continue;
+    }
+
+    if (key === "children") {
+      if (Array.isArray(value)) {
+        sanitized[key] = value.map((item) => {
+          if (isElementLikeObject(item)) {
+            return extractRenderableText(item);
+          }
+          return item;
+        });
+      } else if (value && typeof value === "object") {
+        sanitized[key] = extractRenderableText(value);
+      }
+    }
+  }
+
+  return sanitized;
+};
 
 const formatValidationDetails = (details: unknown): string => {
   if (Array.isArray(details)) {
@@ -106,7 +210,68 @@ export const AIChat = ({
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [openingThreadId, setOpeningThreadId] = useState<string | null>(null);
   const [complianceScore, setComplianceScore] = useState<number | null>(null);
-  const { actions, query } = useEditor();
+  const { actions, query, selectedCanvasId } = useEditor((state) => {
+    const [currentSelectedId] = state.events.selected;
+    const selectedNode = currentSelectedId
+      ? state.nodes[currentSelectedId]
+      : null;
+
+    return {
+      selectedCanvasId:
+        selectedNode?.data.isCanvas && currentSelectedId
+          ? currentSelectedId
+          : undefined,
+    };
+  });
+
+  const findFirstCanvasNodeId = (nodeId: string): string | undefined => {
+    try {
+      const node = query.node(nodeId).get() as Record<string, any> | null;
+      if (!node) {
+        return undefined;
+      }
+
+      if (node.data?.isCanvas) {
+        return nodeId;
+      }
+
+      const childIds = Array.isArray(node.data?.nodes) ? node.data.nodes : [];
+      for (const childId of childIds) {
+        const found = findFirstCanvasNodeId(String(childId));
+        if (found) {
+          return found;
+        }
+      }
+    } catch {
+      return undefined;
+    }
+
+    return undefined;
+  };
+
+  const getInsertionTargetId = () => {
+    if (selectedCanvasId) {
+      return selectedCanvasId;
+    }
+
+    try {
+      const rootNode = query.node("ROOT").get() as Record<string, any> | null;
+      const rootChildren = Array.isArray(rootNode?.data?.nodes)
+        ? rootNode.data.nodes
+        : [];
+
+      for (const childId of rootChildren) {
+        const found = findFirstCanvasNodeId(String(childId));
+        if (found) {
+          return found;
+        }
+      }
+    } catch {
+      // Fall through to ROOT.
+    }
+
+    return "ROOT";
+  };
 
   const craftToPageJSON = () => {
     try {
@@ -239,9 +404,11 @@ export const AIChat = ({
       const Component = typeKey ? ComponentMapper[typeKey] : null;
 
       if (Component) {
+        const targetId = getInsertionTargetId();
+        const safeProps = sanitizeAiComponentProps(props || {});
         actions.add(
-          query.createNode(React.createElement(Component, props)),
-          "ROOT",
+          query.createNode(React.createElement(Component, safeProps)),
+          targetId,
         );
         toast.success("Suggestion applied");
         return;
@@ -367,15 +534,21 @@ export const AIChat = ({
 
     if (operation.action === "insert" && operation.component) {
       const { type, props } = operation.component;
+      const finalProps = shouldForceEmptyTextComponent(userMessage, type)
+        ? buildEmptyTextProps(props || {})
+        : { ...(props || {}) };
+
       const typeKey = Object.keys(ComponentMapper).find(
         (k) => k.toLowerCase() === String(type).toLowerCase(),
       );
       const Component = typeKey ? ComponentMapper[typeKey] : null;
 
       if (Component) {
+        const targetId = getInsertionTargetId();
+        const safeProps = sanitizeAiComponentProps(finalProps);
         actions.add(
-          query.createNode(React.createElement(Component, props)),
-          "ROOT",
+          query.createNode(React.createElement(Component, safeProps)),
+          targetId,
         );
         toast.success(`Added ${type} component!`);
       } else if (
@@ -429,6 +602,7 @@ export const AIChat = ({
         if (imageUrl) {
           const ImageComponent = ComponentMapper.Image;
           if (ImageComponent) {
+            const targetId = getInsertionTargetId();
             actions.add(
               query.createNode(
                 React.createElement(ImageComponent, {
@@ -440,7 +614,7 @@ export const AIChat = ({
                   objectFit: "cover",
                 }),
               ),
-              "ROOT",
+              targetId,
             );
           }
 
