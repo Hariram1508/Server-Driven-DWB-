@@ -1,5 +1,6 @@
 import { Page, IPage } from "../models/Page.model";
 import { Version } from "../models/Version.model";
+import aiService from "./ai.service";
 import { AppError } from "../middleware/error.middleware";
 import { PageJSON } from "../types/page.types";
 
@@ -203,21 +204,69 @@ export class PageService {
   }
 
   // Publish page
-  async publishPage(pageId: string, institutionId: string): Promise<IPage> {
+  async publishPage(
+    pageId: string,
+    institutionId: string,
+    userId: string,
+  ): Promise<IPage> {
     const page = await Page.findOne({ _id: pageId, institutionId });
 
     if (!page) {
       throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
+    const compliance = await aiService.runComplianceValidation(page.jsonConfig);
+
+    await aiService.recordComplianceAudit({
+      institutionId,
+      pageId: page._id.toString(),
+      pageName: page.name,
+      pageSlug: page.slug,
+      eventType: compliance.canPublish ? "validation" : "publish-blocked",
+      severity: compliance.canPublish ? "info" : "critical",
+      message: compliance.canPublish
+        ? `Compliance check passed for ${page.name}.`
+        : `Publish blocked for ${page.name} because critical compliance issues remain.`,
+      details: {
+        score: compliance.score,
+        summary: compliance.summary,
+        checks: compliance.checks,
+      },
+      createdBy: userId,
+    });
+
+    if (!compliance.canPublish) {
+      throw new AppError(
+        "Page has critical compliance issues and cannot be published yet.",
+        422,
+        "COMPLIANCE_BLOCKED",
+      );
+    }
+
     page.isPublished = true;
     await page.save();
+
+    await aiService.recordComplianceAudit({
+      institutionId,
+      pageId: page._id.toString(),
+      pageName: page.name,
+      pageSlug: page.slug,
+      eventType: "publish",
+      severity: "info",
+      message: `Page published: ${page.name}`,
+      details: { score: compliance.score },
+      createdBy: userId,
+    });
 
     return page;
   }
 
   // Unpublish page
-  async unpublishPage(pageId: string, institutionId: string): Promise<IPage> {
+  async unpublishPage(
+    pageId: string,
+    institutionId: string,
+    userId: string,
+  ): Promise<IPage> {
     const page = await Page.findOne({ _id: pageId, institutionId });
 
     if (!page) {
@@ -226,6 +275,17 @@ export class PageService {
 
     page.isPublished = false;
     await page.save();
+
+    await aiService.recordComplianceAudit({
+      institutionId,
+      pageId: page._id.toString(),
+      pageName: page.name,
+      pageSlug: page.slug,
+      eventType: "unpublish",
+      severity: "warning",
+      message: `Page unpublished: ${page.name}`,
+      createdBy: userId,
+    });
 
     return page;
   }

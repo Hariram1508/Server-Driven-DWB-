@@ -351,6 +351,36 @@ export class AIController {
     return sendSuccess(res, result, "Compliance validation completed");
   });
 
+  getComplianceReport = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const report = await aiService.getComplianceReport(req.user.institutionId);
+    return sendSuccess(res, report, "Compliance report fetched");
+  });
+
+  getComplianceAuditTrail = asyncHandler(
+    async (req: Request, res: Response) => {
+      if (!req.user) {
+        return sendError(res, "Unauthorized", 401);
+      }
+
+      const pageId =
+        typeof req.query.pageId === "string" ? req.query.pageId : undefined;
+
+      const trail = await aiService.getComplianceAuditTrail(
+        req.user.institutionId,
+        pageId,
+      );
+      return sendSuccess(
+        res,
+        { events: trail },
+        "Compliance audit trail fetched",
+      );
+    },
+  );
+
   getLiveSuggestions = asyncHandler(async (req: Request, res: Response) => {
     if (!req.user) {
       return sendError(res, "Unauthorized", 401);

@@ -154,6 +154,18 @@ router.post(
   aiController.validateCompliance,
 );
 
+router.get(
+  "/compliance-report",
+  authenticate,
+  aiController.getComplianceReport,
+);
+
+router.get(
+  "/compliance-audit-trail",
+  authenticate,
+  aiController.getComplianceAuditTrail,
+);
+
 // Live suggestions + one-click apply
 router.post(
   "/suggest-live",

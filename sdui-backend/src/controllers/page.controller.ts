@@ -81,7 +81,11 @@ export class PageController {
     }
 
     const { id } = req.params;
-    const page = await pageService.publishPage(id, req.user.institutionId);
+    const page = await pageService.publishPage(
+      id,
+      req.user.institutionId,
+      req.user.userId,
+    );
 
     return sendSuccess(res, page, "Page published successfully");
   });
@@ -93,7 +97,11 @@ export class PageController {
     }
 
     const { id } = req.params;
-    const page = await pageService.unpublishPage(id, req.user.institutionId);
+    const page = await pageService.unpublishPage(
+      id,
+      req.user.institutionId,
+      req.user.userId,
+    );
 
     return sendSuccess(res, page, "Page unpublished successfully");
   });

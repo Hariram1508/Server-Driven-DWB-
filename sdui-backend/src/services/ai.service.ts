@@ -5,7 +5,9 @@ import env from "../config/env";
 import { getRedisClient } from "../config/redis";
 import { AppError } from "../middleware/error.middleware";
 import { AIConversation } from "../models/AIConversation.model";
+import { ComplianceAudit } from "../models/ComplianceAudit.model";
 import { AIUsage } from "../models/AIUsage.model";
+import { Page } from "../models/Page.model";
 import { PageJSON } from "../types/page.types";
 import {
   getTemplate,
@@ -1917,69 +1919,348 @@ ${message}`;
 
   async runComplianceValidation(pageJSON: PageJSON): Promise<{
     score: number;
+    canPublish: boolean;
     checks: Array<{
       category: "AICTE" | "UGC" | "WCAG" | "SEO";
       status: "pass" | "warn" | "fail";
       message: string;
+      fix?: string;
+      evidence?: string[];
+    }>;
+    summary: {
+      total: number;
+      passed: number;
+      warnings: number;
+      critical: number;
+    };
+    recommendations: Array<{
+      id: string;
+      title: string;
+      impact: "high" | "medium" | "low";
+      operation: Record<string, unknown>;
     }>;
   }> {
+    const components = pageJSON?.components || [];
+    const meta = pageJSON?.meta || {};
+    const textBlob =
+      `${JSON.stringify(components)} ${JSON.stringify(meta)}`.toLowerCase();
+    const hasFaculty = components.some((component) =>
+      ["FacultyGrid", "FacultyProfile"].includes(component.type),
+    );
+    const hasContact = components.some((component) =>
+      ["ContactForm", "InquiryForm", "FeedbackForm"].includes(component.type),
+    );
+    const hasCalendar =
+      textBlob.includes("calendar") || textBlob.includes("academic calendar");
+    const hasExamPolicy =
+      textBlob.includes("exam") || textBlob.includes("examination");
+    const hasGrievance = textBlob.includes("grievance");
+    const hasApproval = textBlob.includes("approval");
+    const hasAccreditation = textBlob.includes("accreditation");
+    const hasNirf = textBlob.includes("nirf");
+    const hasAltText = components.some((component) => {
+      const props = component.props || {};
+      const candidate = [props.alt, props.altText, props.caption]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return candidate.includes("alt") || candidate.length > 0;
+    });
+    const hasAria =
+      textBlob.includes("aria-") ||
+      textBlob.includes("aria label") ||
+      textBlob.includes("aria-label");
+    const headingCount = components.filter((component) =>
+      [
+        "HeroBanner",
+        "HeroHeading",
+        "Heading",
+        "TextBlock",
+        "Paragraph",
+      ].includes(component.type),
+    ).length;
+    const imageCount = components.filter(
+      (component) => component.type === "Image",
+    ).length;
+    const rawHtmlCount = components.filter(
+      (component) => component.type === "RawHTML",
+    ).length;
+    const hasTitle = Boolean(String(meta.title || "").trim());
+    const hasDescription = Boolean(String(meta.description || "").trim());
+
     const checks: Array<{
       category: "AICTE" | "UGC" | "WCAG" | "SEO";
       status: "pass" | "warn" | "fail";
       message: string;
-    }> = [];
+      fix?: string;
+      evidence?: string[];
+    }> = [
+      {
+        category: "AICTE",
+        status: hasFaculty ? "pass" : "warn",
+        message: hasFaculty
+          ? "Faculty information components detected."
+          : "Faculty information is missing from the page.",
+        fix: "Add a FacultyGrid or FacultyProfile section with names, roles, and departments.",
+        evidence: hasFaculty ? ["FacultyGrid/FacultyProfile detected"] : [],
+      },
+      {
+        category: "AICTE",
+        status: hasApproval && hasAccreditation && hasNirf ? "pass" : "warn",
+        message:
+          hasApproval && hasAccreditation && hasNirf
+            ? "Approval, accreditation, and ranking references found."
+            : "Approval letters, accreditation, or NIRF references are incomplete.",
+        fix: "Add accreditation, approval, and ranking information in an about or disclosures section.",
+        evidence: [
+          hasApproval ? "approval" : "missing approval",
+          hasAccreditation ? "accreditation" : "missing accreditation",
+          hasNirf ? "NIRF" : "missing NIRF",
+        ],
+      },
+      {
+        category: "UGC",
+        status:
+          hasContact && hasCalendar && hasExamPolicy && hasGrievance
+            ? "pass"
+            : "warn",
+        message:
+          hasContact && hasCalendar && hasExamPolicy && hasGrievance
+            ? "Academic calendar, examination rules, and grievance references detected."
+            : "UGC transparency details are incomplete.",
+        fix: "Add academic calendar, examination policy, and grievance mechanism content.",
+        evidence: [
+          hasContact ? "contact mechanism" : "missing contact mechanism",
+          hasCalendar ? "calendar" : "missing calendar",
+          hasExamPolicy ? "exam policy" : "missing exam policy",
+          hasGrievance ? "grievance" : "missing grievance",
+        ],
+      },
+      {
+        category: "WCAG",
+        status:
+          hasAltText && hasAria && headingCount >= 1
+            ? "pass"
+            : hasAltText || hasAria
+              ? "warn"
+              : "fail",
+        message:
+          hasAltText && hasAria && headingCount >= 1
+            ? "Alt text, ARIA hints, and heading structure detected."
+            : "Accessibility coverage is incomplete.",
+        fix: "Add alt text, aria-labels, and clear heading hierarchy.",
+        evidence: [
+          hasAltText ? "alt text" : "missing alt text",
+          hasAria ? "aria" : "missing aria",
+          headingCount >= 1 ? `headings:${headingCount}` : "missing headings",
+        ],
+      },
+      {
+        category: "SEO",
+        status:
+          hasTitle && hasDescription
+            ? imageCount > 8 || rawHtmlCount > 0
+              ? "warn"
+              : "pass"
+            : "fail",
+        message:
+          hasTitle && hasDescription
+            ? imageCount > 8 || rawHtmlCount > 0
+              ? "SEO meta exists, but heavy content may impact load speed."
+              : "Meta title and description are present."
+            : "Meta title/description missing.",
+        fix:
+          hasTitle && hasDescription
+            ? "Reduce heavy raw HTML/images if possible and keep responsive media sizes small."
+            : "Add page title and meta description before publishing.",
+        evidence: [
+          hasTitle ? "title" : "missing title",
+          hasDescription ? "description" : "missing description",
+          `images:${imageCount}`,
+          `rawHtml:${rawHtmlCount}`,
+        ],
+      },
+    ];
 
-    const components = pageJSON?.components || [];
-    const hasContact = components.some((component) =>
-      ["ContactForm", "InquiryForm"].includes(component.type),
-    );
-    const hasFaculty = components.some((component) =>
-      ["FacultyGrid", "FacultyProfile"].includes(component.type),
-    );
-    const hasAccessibilityFriendlyText = components.some((component) => {
-      const text = JSON.stringify(component.props || {}).toLowerCase();
-      return text.includes("alt") || text.includes("aria");
-    });
-    const meta = pageJSON?.meta || {};
-    const hasTitle = Boolean(meta.title?.trim());
-    const hasDescription = Boolean(meta.description?.trim());
+    const passed = checks.filter((check) => check.status === "pass").length;
+    const warnings = checks.filter((check) => check.status === "warn").length;
+    const critical = checks.filter((check) => check.status === "fail").length;
+    const score = Math.round((passed / checks.length) * 100);
 
-    checks.push({
-      category: "AICTE",
-      status: hasFaculty ? "pass" : "warn",
-      message: hasFaculty
-        ? "Faculty information components detected."
-        : "Add faculty components for stronger AICTE compliance context.",
+    const recommendations = checks
+      .filter((check) => check.status !== "pass")
+      .map((check) => ({
+        id: randomUUID(),
+        title: `${check.category}: ${check.message}`,
+        impact: (check.status === "fail" ? "high" : "medium") as
+          | "high"
+          | "medium",
+        operation: {
+          op: "set-meta",
+          meta: {
+            title: hasTitle ? meta.title : meta.title || "Institution website",
+            description: hasDescription
+              ? meta.description
+              : "Add a concise SEO description before publishing.",
+          },
+        },
+      }));
+
+    return {
+      score,
+      canPublish: critical === 0,
+      checks,
+      summary: {
+        total: checks.length,
+        passed,
+        warnings,
+        critical,
+      },
+      recommendations,
+    };
+  }
+
+  async recordComplianceAudit(entry: {
+    institutionId: string;
+    pageId?: string;
+    pageName?: string;
+    pageSlug?: string;
+    eventType:
+      | "validation"
+      | "publish"
+      | "publish-blocked"
+      | "unpublish"
+      | "fix-suggestion";
+    severity: "info" | "warning" | "critical";
+    message: string;
+    details?: Record<string, unknown>;
+    createdBy: string;
+  }) {
+    return ComplianceAudit.create({
+      institutionId: entry.institutionId,
+      pageId: entry.pageId,
+      pageName: entry.pageName,
+      pageSlug: entry.pageSlug,
+      eventType: entry.eventType,
+      severity: entry.severity,
+      message: entry.message,
+      details: entry.details || {},
+      createdBy: entry.createdBy,
     });
-    checks.push({
-      category: "UGC",
-      status: hasContact ? "pass" : "warn",
-      message: hasContact
-        ? "Contact/inquiry mechanism detected."
-        : "Add inquiry/contact form for UGC information accessibility expectations.",
-    });
-    checks.push({
-      category: "WCAG",
-      status: hasAccessibilityFriendlyText ? "pass" : "warn",
-      message: hasAccessibilityFriendlyText
-        ? "Accessibility-related attributes found in component props."
-        : "Add alt text and ARIA labels to improve WCAG alignment.",
-    });
-    checks.push({
-      category: "SEO",
-      status: hasTitle && hasDescription ? "pass" : "fail",
-      message:
-        hasTitle && hasDescription
-          ? "Page meta title and description are present."
-          : "Meta title/description missing. Add both for baseline SEO.",
+  }
+
+  async getComplianceAuditTrail(
+    institutionId: string,
+    pageId?: string,
+  ): Promise<Array<Record<string, unknown>>> {
+    const filter: Record<string, unknown> = { institutionId };
+    if (pageId) {
+      filter.pageId = pageId;
+    }
+
+    const records = await ComplianceAudit.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .populate("createdBy", "name email")
+      .populate("pageId", "name slug");
+
+    return records.map((record) => ({
+      id: record._id.toString(),
+      pageId: (record.pageId as any)?._id?.toString?.() || record.pageId,
+      pageName: record.pageName || (record.pageId as any)?.name || "Unknown",
+      pageSlug: record.pageSlug || (record.pageId as any)?.slug || "",
+      eventType: record.eventType,
+      severity: record.severity,
+      message: record.message,
+      details: record.details || {},
+      createdBy: record.createdBy,
+      createdAt: record.createdAt,
+    }));
+  }
+
+  async getComplianceReport(institutionId: string): Promise<{
+    summary: {
+      totalPages: number;
+      publishedPages: number;
+      complianceScore: number;
+      criticalIssues: number;
+      warnings: number;
+    };
+    pages: Array<{
+      pageId: string;
+      name: string;
+      slug: string;
+      score: number;
+      canPublish: boolean;
+      critical: number;
+      warnings: number;
+      lastValidatedAt?: Date;
+      checks: Array<{
+        category: "AICTE" | "UGC" | "WCAG" | "SEO";
+        status: "pass" | "warn" | "fail";
+        message: string;
+        fix?: string;
+      }>;
+    }>;
+    auditTrail: Array<Record<string, unknown>>;
+  }> {
+    const pages = await Page.find({ institutionId })
+      .select("name slug jsonConfig isPublished updatedAt updatedBy")
+      .sort({ updatedAt: -1 });
+
+    const reports = pages.map((page) => {
+      const validation = this.runComplianceValidation(
+        page.jsonConfig as PageJSON,
+      );
+      return validation.then((result) => ({
+        pageId: page._id.toString(),
+        name: page.name,
+        slug: page.slug,
+        score: result.score,
+        canPublish: result.canPublish,
+        critical: result.summary.critical,
+        warnings: result.summary.warnings,
+        lastValidatedAt: page.updatedAt,
+        checks: result.checks.map((check) => ({
+          category: check.category,
+          status: check.status,
+          message: check.message,
+          fix: check.fix,
+        })),
+        recommendations: result.recommendations.slice(0, 3),
+      }));
     });
 
-    const score = Math.round(
-      (checks.filter((check) => check.status === "pass").length /
-        checks.length) *
-        100,
+    const pageReports = await Promise.all(reports);
+    const totalPages = pageReports.length;
+    const complianceScore = totalPages
+      ? Math.round(
+          pageReports.reduce((total, page) => total + page.score, 0) /
+            totalPages,
+        )
+      : 100;
+    const criticalIssues = pageReports.reduce(
+      (total, page) => total + page.critical,
+      0,
     );
-    return { score, checks };
+    const warnings = pageReports.reduce(
+      (total, page) => total + page.warnings,
+      0,
+    );
+
+    const auditTrail = await this.getComplianceAuditTrail(institutionId);
+
+    return {
+      summary: {
+        totalPages,
+        publishedPages: pages.filter((page) => page.isPublished).length,
+        complianceScore,
+        criticalIssues,
+        warnings,
+      },
+      pages: pageReports,
+      auditTrail,
+    };
   }
 
   async getLiveSuggestions(pageJSON: PageJSON): Promise<{

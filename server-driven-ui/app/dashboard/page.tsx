@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/AuthContext";
 import * as pagesApi from "@/lib/api/pages.api";
@@ -11,6 +11,7 @@ import {
   getUsageSummary,
   runNlpBenchmark,
 } from "@/lib/api/ai.api";
+import { getComplianceReport } from "@/lib/api/ai.api";
 import { Page } from "@/lib/types/page.types";
 import { toast } from "sonner";
 import {
@@ -38,6 +39,9 @@ import {
   ArrowUp,
   ArrowDown,
   Trash2,
+  Download,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
@@ -65,6 +69,46 @@ interface AIUsageSummary {
     cacheHits: number;
   };
   byFeature?: Array<{ feature: string; requests: number; costUsd: number }>;
+}
+
+interface ComplianceReport {
+  summary: {
+    totalPages: number;
+    publishedPages: number;
+    complianceScore: number;
+    criticalIssues: number;
+    warnings: number;
+  };
+  pages: Array<{
+    pageId: string;
+    name: string;
+    slug: string;
+    score: number;
+    canPublish: boolean;
+    critical: number;
+    warnings: number;
+    checks: Array<{
+      category: "AICTE" | "UGC" | "WCAG" | "SEO";
+      status: "pass" | "warn" | "fail";
+      message: string;
+      fix?: string;
+    }>;
+    recommendations?: Array<{
+      id: string;
+      title: string;
+      impact: "high" | "medium" | "low";
+      operation: Record<string, unknown>;
+    }>;
+  }>;
+  auditTrail: Array<{
+    id: string;
+    pageName?: string;
+    pageSlug?: string;
+    eventType: string;
+    severity: "info" | "warning" | "critical";
+    message: string;
+    createdAt: string;
+  }>;
 }
 
 // ── FULL-SITE BUILDER MODAL ───────────────────────────────────────────────────
@@ -868,16 +912,22 @@ export default function DashboardPage() {
   const [savingRename, setSavingRename] = useState(false);
   const [busyPageId, setBusyPageId] = useState<string | null>(null);
   const [usageSummary, setUsageSummary] = useState<AIUsageSummary | null>(null);
+  const [complianceReport, setComplianceReport] =
+    useState<ComplianceReport | null>(null);
+  const [loadingCompliance, setLoadingCompliance] = useState(false);
   const [loadingUsage, setLoadingUsage] = useState(false);
   const [runningBenchmark, setRunningBenchmark] = useState(false);
+  const [publishingPageId, setPublishingPageId] = useState<string | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [prefillName, setPrefillName] = useState("");
   const [prefillSlug, setPrefillSlug] = useState("");
   const [hasAppliedQueryPrefill, setHasAppliedQueryPrefill] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const searchParams = new URLSearchParams(window.location.search);
     const createMode = searchParams.get("create");
     if (createMode !== "1" || hasAppliedQueryPrefill) return;
 
@@ -892,7 +942,7 @@ export default function DashboardPage() {
     setPrefillName(rawName);
     setShowNewPageModal(true);
     setHasAppliedQueryPrefill(true);
-  }, [searchParams, hasAppliedQueryPrefill]);
+  }, [hasAppliedQueryPrefill]);
 
   useEffect(() => {
     if (!isLoading && !user) router.push("/login");
@@ -939,6 +989,23 @@ export default function DashboardPage() {
 
     void fetchUsage();
   }, [user?.role]);
+
+  useEffect(() => {
+    const fetchCompliance = async () => {
+      if (!user) return;
+      setLoadingCompliance(true);
+      try {
+        const response = await getComplianceReport();
+        setComplianceReport(response?.data ?? response ?? null);
+      } catch (error) {
+        console.error("Failed to fetch compliance report:", error);
+      } finally {
+        setLoadingCompliance(false);
+      }
+    };
+
+    void fetchCompliance();
+  }, [user]);
 
   const handleCreatePage = async (
     name: string,
@@ -1083,6 +1150,78 @@ export default function DashboardPage() {
     }
   };
 
+  const handlePublishPage = async (page: Page) => {
+    setPublishingPageId(page._id);
+    try {
+      const updated = await pagesApi.publishPage(page._id);
+      setPages((prev) =>
+        prev.map((item) =>
+          item._id === updated._id ? { ...item, ...updated } : item,
+        ),
+      );
+      toast.success(`Published ${page.name}`);
+      const refreshed = await getComplianceReport();
+      setComplianceReport(refreshed?.data ?? refreshed ?? null);
+    } catch (error: any) {
+      const errorMessage =
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to publish page.";
+      toast.error(errorMessage);
+      if (
+        String(error?.response?.data?.error?.code || "").includes(
+          "COMPLIANCE_BLOCKED",
+        )
+      ) {
+        const refreshed = await getComplianceReport();
+        setComplianceReport(refreshed?.data ?? refreshed ?? null);
+      }
+    } finally {
+      setPublishingPageId(null);
+      setOpenActionsFor(null);
+    }
+  };
+
+  const handleUnpublishPage = async (page: Page) => {
+    setPublishingPageId(page._id);
+    try {
+      const updated = await pagesApi.unpublishPage(page._id);
+      setPages((prev) =>
+        prev.map((item) =>
+          item._id === updated._id ? { ...item, ...updated } : item,
+        ),
+      );
+      toast.success(`Unpublished ${page.name}`);
+      const refreshed = await getComplianceReport();
+      setComplianceReport(refreshed?.data ?? refreshed ?? null);
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.error?.message ||
+          error?.message ||
+          "Failed to unpublish page.",
+      );
+    } finally {
+      setPublishingPageId(null);
+      setOpenActionsFor(null);
+    }
+  };
+
+  const exportComplianceReport = () => {
+    if (!complianceReport) return;
+
+    const blob = new Blob([JSON.stringify(complianceReport, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `compliance-report-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success("Compliance report exported");
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -1109,142 +1248,254 @@ export default function DashboardPage() {
     ? (filteredPages.find((page) => page._id === openActionsFor) ?? null)
     : null;
   return (
-    <div className="min-h-screen bg-gray-50/50 flex flex-col">
-      {/* Header */}
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-30">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,#e0f2fe,transparent_42%),radial-gradient(circle_at_88%_2%,#ede9fe,transparent_36%),linear-gradient(180deg,#f8fbff_0%,#eef4ff_48%,#ffffff_100%)] flex flex-col">
+      <nav className="sticky top-0 z-30 border-b border-white/60 bg-white/70 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
+          <div className="h-20 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-sky-600 to-indigo-700 text-white grid place-items-center shadow-lg shadow-blue-200/70">
                 <Bot className="w-5 h-5" />
               </div>
-              <span className="text-lg font-black tracking-tight text-gray-900 uppercase">
-                Campus<span className="text-blue-600">Sync</span>
-              </span>
+              <div>
+                <p className="text-lg font-black text-slate-900 tracking-tight uppercase">
+                  Campus<span className="text-sky-600">Sync</span>
+                </p>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
+                  Command Center
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-6">
-              <div className="hidden md:flex flex-col text-right">
-                <span className="text-sm font-black text-gray-900">
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex flex-col items-end">
+                <span className="text-sm font-black text-slate-900">
                   {user?.name}
                 </span>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                   {user?.role}
                 </span>
               </div>
-              <div className="h-8 w-px bg-gray-100" />
               <button
                 onClick={() => logout()}
-                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                className="h-10 w-10 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-red-500 hover:border-red-200 transition"
                 title="Logout"
               >
-                <LogOut className="w-5 h-5" />
+                <LogOut className="w-4 h-4 mx-auto" />
               </button>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
-        {/* Title & Actions */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-          <div>
-            <h1 className="text-3xl font-black text-gray-900 tracking-tight">
-              Dashboard
-            </h1>
-            <p className="text-gray-500 font-medium">
-              Build and manage your AI-powered website.
-            </p>
-          </div>
-          {canEdit && (
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={() => setShowNewPageModal(true)}
-                className="rounded-2xl h-12 px-6 bg-white border border-gray-200 text-gray-900 font-bold flex items-center gap-2 hover:bg-gray-50 shadow-sm transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Single Page
-              </Button>
-              <button
-                onClick={() => setShowSiteBuilder(true)}
-                className="rounded-2xl h-12 px-6 bg-gradient-to-r from-blue-600 to-violet-600 hover:opacity-90 text-white font-bold flex items-center gap-2 shadow-xl transition-all hover:-translate-y-0.5"
-              >
-                <Globe className="w-4 h-4" />
-                Build Full Website
-              </button>
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 w-full">
+        <section className="rounded-4xl border border-white/80 bg-white/70 backdrop-blur-xl p-6 sm:p-8 shadow-[0_25px_80px_-38px_rgba(15,23,42,0.35)] mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+            <div className="max-w-2xl">
+              <p className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-sky-700 bg-sky-50 border border-sky-100 rounded-full px-3 py-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Modern Builder Workspace
+              </p>
+              <h1 className="mt-4 text-3xl sm:text-4xl font-black tracking-tight text-slate-900">
+                Design, validate, and publish with confidence.
+              </h1>
+              <p className="mt-3 text-slate-600 font-medium leading-relaxed">
+                Manage pages, compliance, and AI generation from one
+                high-clarity dashboard optimized for desktop and mobile.
+              </p>
             </div>
-          )}
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Stats */}
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xs">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">
-                  Status
+            {canEdit && (
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => setShowNewPageModal(true)}
+                  className="h-11 px-5 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold hover:bg-slate-50 shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Single Page
+                </Button>
+                <button
+                  onClick={() => setShowSiteBuilder(true)}
+                  className="h-11 px-5 rounded-xl bg-linear-to-r from-sky-600 to-indigo-700 text-white font-bold shadow-lg shadow-blue-200/70 hover:opacity-95 transition"
+                >
+                  <Globe className="w-4 h-4 inline mr-2" />
+                  Build Full Website
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+          <aside className="xl:col-span-4 space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-white/80 bg-white p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Total Pages
+                </p>
+                <p className="mt-1 text-2xl font-black text-slate-900">
+                  {pages.length}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Security
+                </p>
+                <p className="mt-1 text-sm font-black text-sky-700 inline-flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5" />
+                  High
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/80 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">
+                  Compliance
                 </h3>
-                <Activity className="w-4 h-4 text-green-500" />
+                <ShieldCheck className="w-4 h-4 text-sky-600" />
               </div>
-              <div className="space-y-4">
-                <div className="p-4 bg-gray-50 rounded-2xl">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                    Total Pages
-                  </p>
-                  <p className="text-2xl font-black text-gray-900">
-                    {pages.length}
-                  </p>
+
+              {loadingCompliance ? (
+                <div className="py-6 text-center text-xs font-semibold text-slate-500">
+                  Loading compliance...
                 </div>
-                <div className="p-4 bg-gray-50 rounded-2xl">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                    Security
-                  </p>
-                  <p className="text-sm font-bold text-blue-600 flex items-center gap-2">
-                    <Shield className="w-3.5 h-3.5" /> High / Encrypted
-                  </p>
+              ) : complianceReport ? (
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-slate-950 text-white p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-white/60">
+                      Overall Score
+                    </p>
+                    <p className="text-3xl font-black mt-1">
+                      {complianceReport.summary.complianceScore}%
+                    </p>
+                    <p className="text-[11px] text-white/65 mt-1">
+                      {complianceReport.summary.criticalIssues > 0
+                        ? `${complianceReport.summary.criticalIssues} critical blocker(s)`
+                        : "Publish-ready"}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Pages
+                      </p>
+                      <p className="text-sm font-bold text-slate-900">
+                        {complianceReport.summary.totalPages}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-red-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-red-400">
+                        Critical
+                      </p>
+                      <p className="text-sm font-bold text-red-600">
+                        {complianceReport.summary.criticalIssues}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-amber-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-amber-500">
+                        Warnings
+                      </p>
+                      <p className="text-sm font-bold text-amber-600">
+                        {complianceReport.summary.warnings}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      onClick={exportComplianceReport}
+                      className="h-10 rounded-xl bg-sky-600 text-white text-xs font-black uppercase tracking-widest hover:bg-sky-700 transition flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export
+                    </button>
+                    <Link
+                      href="/dashboard/compliance"
+                      className="h-10 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 text-xs font-black uppercase tracking-widest hover:bg-sky-100 transition flex items-center justify-center gap-2"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      Full Report
+                    </Link>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    {complianceReport.pages
+                      .filter((page) => !page.canPublish || page.critical > 0)
+                      .slice(0, 2)
+                      .map((page) => (
+                        <div
+                          key={page.pageId}
+                          className="rounded-xl border border-amber-100 bg-amber-50 p-3"
+                        >
+                          <div className="flex justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-900 truncate">
+                                {page.name}
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                /{page.slug}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+                              {page.score}%
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => router.push(`/edit/${page.slug}`)}
+                            className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700 hover:text-amber-800 inline-flex items-center gap-1"
+                          >
+                            Fix now <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="py-6 text-center text-xs font-semibold text-slate-500">
+                  Compliance report unavailable.
+                </div>
+              )}
             </div>
 
             {user?.role === "super-admin" && (
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xs">
+              <div className="rounded-3xl border border-white/80 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">
                     AI Cost Monitor
                   </h3>
-                  <Bot className="w-4 h-4 text-blue-500" />
+                  <Activity className="w-4 h-4 text-indigo-600" />
                 </div>
-
                 {loadingUsage ? (
-                  <div className="py-6 text-center text-xs font-semibold text-gray-500">
+                  <div className="py-6 text-center text-xs font-semibold text-slate-500">
                     Loading usage...
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="p-3 bg-gray-50 rounded-xl">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                         30-Day Cost
                       </p>
-                      <p className="text-2xl font-black text-gray-900">
+                      <p className="text-2xl font-black text-slate-900">
                         $
                         {usageSummary?.overview?.totalCostUsd?.toFixed(2) ||
                           "0.00"}
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="p-3 bg-gray-50 rounded-xl">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                           Requests
                         </p>
-                        <p className="text-sm font-bold text-gray-900">
+                        <p className="text-sm font-bold text-slate-900">
                           {usageSummary?.overview?.totalRequests || 0}
                         </p>
                       </div>
-                      <div className="p-3 bg-gray-50 rounded-xl">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
-                          Cache Hits
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Cache
                         </p>
-                        <p className="text-sm font-bold text-gray-900">
+                        <p className="text-sm font-bold text-slate-900">
                           {usageSummary?.overview?.cacheHits || 0}
                         </p>
                       </div>
@@ -1252,7 +1503,7 @@ export default function DashboardPage() {
                     <button
                       onClick={handleRunBenchmark}
                       disabled={runningBenchmark}
-                      className="w-full h-10 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest transition"
+                      className="w-full h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-widest transition"
                     >
                       {runningBenchmark
                         ? "Running Benchmark..."
@@ -1263,174 +1514,166 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* AI Site Builder Card */}
-            <div className="bg-gradient-to-br from-blue-600 to-violet-700 p-8 rounded-[2.5rem] shadow-2xl text-white relative overflow-hidden group">
-              <div className="relative z-10">
-                <Globe className="w-10 h-10 text-white/30 mb-6" />
-                <h3 className="text-xl font-bold mb-2">Full Website Builder</h3>
-                <p className="text-blue-100/80 text-sm leading-relaxed mb-8">
-                  Describe your entire website in one prompt. AI builds every
-                  page with working navigation.
-                </p>
-                <button
-                  onClick={() => setShowSiteBuilder(true)}
-                  className="w-full bg-white text-blue-600 font-bold py-4 rounded-2xl shadow-xl hover:bg-blue-50 transition-colors"
-                >
-                  ✦ Build Full Site with AI
-                </button>
-              </div>
-              <div className="absolute top-0 right-0 -translate-y-4 translate-x-4 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-1000" />
+            <div className="rounded-3xl bg-linear-to-br from-sky-600 to-indigo-700 text-white p-6 shadow-xl">
+              <Globe className="w-9 h-9 text-white/70 mb-4" />
+              <h3 className="text-lg font-black">Full Website Builder</h3>
+              <p className="text-sm text-sky-100/90 mt-2 leading-relaxed">
+                Generate a complete multi-page website with connected navigation
+                from one prompt.
+              </p>
+              <button
+                onClick={() => setShowSiteBuilder(true)}
+                className="mt-5 w-full h-11 rounded-xl bg-white text-sky-700 font-black hover:bg-sky-50 transition"
+              >
+                Build with AI
+              </button>
             </div>
-          </div>
+          </aside>
 
-          {/* Pages List */}
-          <div className="lg:col-span-3">
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xs overflow-hidden">
-              <div className="p-8 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
-                <h2 className="text-lg font-black text-gray-900 uppercase tracking-widest">
-                  All Pages
-                </h2>
+          <section className="xl:col-span-8">
+            <div className="rounded-3xl border border-white/80 bg-white/90 overflow-hidden shadow-[0_22px_70px_-42px_rgba(15,23,42,0.35)]">
+              <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-black tracking-tight text-slate-900">
+                    Project Pages
+                  </h2>
+                  <p className="text-sm text-slate-500 font-medium">
+                    Edit, validate, reorder, and publish from one place.
+                  </p>
+                </div>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter pages..."
-                    className="h-10 pl-9 pr-4 rounded-xl border-gray-100 text-sm focus:border-blue-500 bg-white"
+                    placeholder="Search pages"
+                    className="h-10 pl-9 pr-4 w-56 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-sky-100"
                   />
                 </div>
               </div>
 
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-slate-100">
                 {fetchingPages ? (
-                  <div className="p-20 text-center">
-                    <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto" />
+                  <div className="p-16 text-center">
+                    <Loader2 className="w-8 h-8 mx-auto animate-spin text-sky-600" />
                   </div>
                 ) : filteredPages.length > 0 ? (
-                  filteredPages.map((page) => {
-                    return (
-                      <div
-                        key={page._id}
-                        className="p-8 hover:bg-gray-50 transition-all duration-300 group"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                          <div className="flex items-center gap-6">
-                            <div
-                              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
-                                page.useHtml
-                                  ? "bg-blue-50 text-blue-600"
-                                  : "bg-violet-50 text-violet-600"
-                              }`}
-                            >
-                              {page.useHtml ? (
-                                <Bot className="w-6 h-6" />
-                              ) : (
-                                <Layout className="w-6 h-6" />
-                              )}
-                            </div>
-                            <div>
-                              <h3 className="text-xl font-bold text-gray-900 mb-1">
-                                {page.name}
-                              </h3>
-                              <div className="flex items-center gap-3">
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-md ring-1 ring-green-200">
-                                  Live
-                                </span>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                                  {page.useHtml ? "AI Build" : "Visual Canvas"}
-                                </span>
-                                <span className="text-xs font-mono text-gray-400">
-                                  /{page.slug}
-                                </span>
-                              </div>
-                            </div>
+                  filteredPages.map((page) => (
+                    <div
+                      key={page._id}
+                      className="p-5 sm:p-6 hover:bg-slate-50/70 transition"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div
+                            className={`w-12 h-12 rounded-xl grid place-items-center ${page.useHtml ? "bg-sky-100 text-sky-700" : "bg-indigo-100 text-indigo-700"}`}
+                          >
+                            {page.useHtml ? (
+                              <Bot className="w-5 h-5" />
+                            ) : (
+                              <Layout className="w-5 h-5" />
+                            )}
                           </div>
-
-                          <div className="flex items-center gap-3">
-                            {canEdit && (
-                              <Link
-                                href={`/edit/${page.slug}`}
-                                className="h-12 px-6 rounded-xl bg-white border border-gray-100 text-gray-900 text-sm font-bold flex items-center gap-2 hover:bg-gray-50 hover:shadow-sm transition-all shadow-xs"
+                          <div className="min-w-0">
+                            <h3 className="text-lg font-bold text-slate-900 truncate">
+                              {page.name}
+                            </h3>
+                            <div className="flex items-center flex-wrap gap-2 mt-1">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${page.isPublished ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
                               >
-                                <FileEdit className="w-4 h-4 text-blue-600" />
-                                Edit
-                              </Link>
-                            )}
-                            <Link
-                              href={`/${page.slug}`}
-                              className="h-12 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 flex items-center gap-2 text-white text-sm font-bold transition-all shadow-sm hover:shadow-blue-200 hover:-translate-y-0.5"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                              Play
-                            </Link>
-                            {canEdit && (
-                              <div className="relative">
-                                <button
-                                  onClick={(event) => {
-                                    if (openActionsFor === page._id) {
-                                      setOpenActionsFor(null);
-                                      return;
-                                    }
-
-                                    const buttonRect =
-                                      event.currentTarget.getBoundingClientRect();
-                                    const estimatedMenuHeight = 260;
-                                    const spaceBelow =
-                                      window.innerHeight - buttonRect.bottom;
-                                    const spaceAbove = buttonRect.top;
-                                    const menuWidth = 224;
-                                    const left = Math.min(
-                                      Math.max(
-                                        16,
-                                        buttonRect.right - menuWidth,
-                                      ),
-                                      window.innerWidth - menuWidth - 16,
-                                    );
-
-                                    setOpenActionsUpward(
-                                      spaceBelow < estimatedMenuHeight &&
-                                        spaceAbove > spaceBelow,
-                                    );
-                                    setOpenActionsPosition({
-                                      top: buttonRect.bottom + 12,
-                                      left,
-                                    });
-                                    setOpenActionsFor(page._id);
-                                  }}
-                                  title="Open page actions"
-                                  aria-label="Open page actions"
-                                  className="h-12 w-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-all"
-                                >
-                                  <MoreVertical className="w-5 h-5" />
-                                </button>
-                              </div>
-                            )}
+                                {page.isPublished ? "Live" : "Draft"}
+                              </span>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                {page.useHtml ? "AI Build" : "Visual Canvas"}
+                              </span>
+                              <span className="text-xs font-mono text-slate-500 truncate">
+                                /{page.slug}
+                              </span>
+                            </div>
                           </div>
                         </div>
+
+                        <div className="flex items-center gap-2">
+                          {canEdit && (
+                            <Link
+                              href={`/edit/${page.slug}`}
+                              className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm font-bold inline-flex items-center gap-2 hover:bg-slate-50"
+                            >
+                              <FileEdit className="w-4 h-4 text-sky-600" />
+                              Edit
+                            </Link>
+                          )}
+                          <Link
+                            href={`/${page.slug}`}
+                            className="h-10 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold inline-flex items-center gap-2"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            Live
+                          </Link>
+                          {canEdit && (
+                            <button
+                              onClick={(event) => {
+                                if (openActionsFor === page._id) {
+                                  setOpenActionsFor(null);
+                                  return;
+                                }
+
+                                const buttonRect =
+                                  event.currentTarget.getBoundingClientRect();
+                                const estimatedMenuHeight = 260;
+                                const spaceBelow =
+                                  window.innerHeight - buttonRect.bottom;
+                                const spaceAbove = buttonRect.top;
+                                const menuWidth = 224;
+                                const left = Math.min(
+                                  Math.max(16, buttonRect.right - menuWidth),
+                                  window.innerWidth - menuWidth - 16,
+                                );
+
+                                setOpenActionsUpward(
+                                  spaceBelow < estimatedMenuHeight &&
+                                    spaceAbove > spaceBelow,
+                                );
+                                setOpenActionsPosition({
+                                  top: buttonRect.bottom + 12,
+                                  left,
+                                });
+                                setOpenActionsFor(page._id);
+                              }}
+                              title="Open page actions"
+                              aria-label="Open page actions"
+                              className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                            >
+                              <MoreVertical className="w-4 h-4 mx-auto" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    );
-                  })
+                    </div>
+                  ))
                 ) : (
-                  <div className="p-20 text-center">
-                    <Globe className="w-12 h-12 text-gray-100 mx-auto mb-6" />
-                    <h3 className="text-xl font-black text-gray-900 mb-2">
-                      No pages yet.
+                  <div className="p-16 text-center">
+                    <Globe className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-black text-slate-900">
+                      No pages yet
                     </h3>
-                    <p className="text-gray-400 font-medium mb-10">
-                      Build your first website with a single prompt.
+                    <p className="text-slate-500 font-medium mt-2 mb-6">
+                      Start with a single page or generate a complete site using
+                      AI.
                     </p>
                     <button
                       onClick={() => setShowSiteBuilder(true)}
-                      className="h-14 px-10 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 text-white font-bold shadow-xl"
+                      className="h-11 px-6 rounded-xl bg-linear-to-r from-sky-600 to-indigo-700 text-white font-bold"
                     >
-                      ✦ Build Full Website
+                      Build Full Website
                     </button>
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          </section>
         </div>
       </main>
 
@@ -1483,6 +1726,22 @@ export default function DashboardPage() {
           >
             <Pencil className="w-4 h-4 text-violet-600" />
             Rename Page
+          </button>
+          <button
+            disabled={publishingPageId === activePage._id}
+            onClick={() =>
+              activePage.isPublished
+                ? void handleUnpublishPage(activePage)
+                : void handlePublishPage(activePage)
+            }
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            {publishingPageId === activePage._id
+              ? "Validating…"
+              : activePage.isPublished
+                ? "Unpublish Page"
+                : "Validate & Publish"}
           </button>
           <button
             disabled={activePage._id === firstFilteredPageId}

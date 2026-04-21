@@ -116,6 +116,20 @@ export const validateCompliance = async (pageJSON: any): Promise<any> => {
   return response.data;
 };
 
+export const getComplianceReport = async (): Promise<any> => {
+  const response = await apiClient.get("/ai/compliance-report");
+  return response.data;
+};
+
+export const getComplianceAuditTrail = async (
+  pageId?: string,
+): Promise<any> => {
+  const response = await apiClient.get("/ai/compliance-audit-trail", {
+    params: pageId ? { pageId } : undefined,
+  });
+  return response.data;
+};
+
 export const getLiveSuggestions = async (pageJSON: any): Promise<any> => {
   const response = await apiClient.post("/ai/suggest-live", { pageJSON });
   return response.data;
