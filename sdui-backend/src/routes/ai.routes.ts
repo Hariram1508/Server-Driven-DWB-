@@ -16,6 +16,7 @@ router.post(
   validate([
     body("command").trim().notEmpty().withMessage("Command is required"),
     body("context").optional(),
+    body("model").optional().isString().withMessage("Model must be a string"),
   ]),
   aiController.processCommand,
 );
@@ -57,6 +58,7 @@ router.post(
   aiLimiter,
   validate([
     body("prompt").trim().notEmpty().withMessage("Prompt is required"),
+    body("model").optional().isString().withMessage("Model must be a string"),
   ]),
   aiController.generateCustomComponent,
 );

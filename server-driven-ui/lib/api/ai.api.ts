@@ -3,8 +3,13 @@ import apiClient from "./client";
 export const processCommand = async (
   command: string,
   context?: any,
+  model?: string,
 ): Promise<any> => {
-  const response = await apiClient.post("/ai/command", { command, context });
+  const response = await apiClient.post("/ai/command", {
+    command,
+    context,
+    model,
+  });
   return response.data;
 };
 
@@ -29,8 +34,14 @@ export const validateDesign = async (pageJSON: any): Promise<any> => {
   return response.data;
 };
 
-export const generateComponent = async (prompt: string): Promise<any> => {
-  const response = await apiClient.post("/ai/generate-component", { prompt });
+export const generateComponent = async (
+  prompt: string,
+  model?: string,
+): Promise<any> => {
+  const response = await apiClient.post("/ai/generate-component", {
+    prompt,
+    model,
+  });
   return response.data;
 };
 

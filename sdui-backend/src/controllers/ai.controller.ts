@@ -12,9 +12,13 @@ export class AIController {
       return sendError(res, "Unauthorized", 401);
     }
 
-    const { command, context } = req.body;
+    const { command, context, model } = req.body;
 
-    const result = await aiService.processCommand(command, context);
+    const result = await aiService.processCommand(
+      command,
+      context,
+      typeof model === "string" ? model : undefined,
+    );
 
     if (result.success) {
       return sendSuccess(
@@ -104,13 +108,16 @@ export class AIController {
         return sendError(res, "Unauthorized", 401);
       }
 
-      const { prompt } = req.body;
+      const { prompt, model } = req.body;
 
       if (!prompt) {
         return sendError(res, "Prompt is required", 400);
       }
 
-      const result = await aiService.generateComponent(prompt);
+      const result = await aiService.generateComponent(
+        prompt,
+        typeof model === "string" ? model : undefined,
+      );
 
       if (result.success && result.component) {
         // Save the generated component to the database

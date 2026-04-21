@@ -17,6 +17,63 @@ export class AIService {
   private anthropic: Anthropic | null = null;
   private groq: OpenAI | null = null;
   private openai: OpenAI | null = null;
+  private readonly supportedComponentTypes = [
+    "HeroBanner",
+    "HeroHeading",
+    "HeroSubheading",
+    "HeroCTAButton",
+    "TextBlock",
+    "Container",
+    "Section",
+    "Grid",
+    "GridSection",
+    "Image",
+    "Video",
+    "AboutSection",
+    "Statistics",
+    "FacultyGrid",
+    "FAQAccordion",
+    "ContactForm",
+    "DynamicSection",
+    "Button",
+    "ActionButton",
+    "RawHTML",
+    "Card",
+    "ClubCard",
+    "CourseList",
+    "DepartmentCard",
+    "Divider",
+    "EventCalendar",
+    "ExamSchedule",
+    "FacilityCard",
+    "FeedbackForm",
+    "Footer",
+    "Breadcrumb",
+    "Pagination",
+    "Gallery",
+    "Heading",
+    "Paragraph",
+    "Spacer",
+    "FacultyProfile",
+    "AdmissionForm",
+    "AnnouncementBanner",
+    "InquiryForm",
+    "Badge",
+    "AlertBanner",
+    "Modal",
+    "Navbar",
+    "PlacementStats",
+    "ProgressTracker",
+    "Quote",
+    "ScholarshipCard",
+    "Sidebar",
+    "Stack",
+    "StudentTestimonial",
+    "Tabs",
+    "Testimonial",
+    "Timeline",
+    "Tooltip",
+  ] as const;
 
   constructor() {
     if (env.anthropicApiKey) {
@@ -119,6 +176,7 @@ export class AIService {
   async processCommand(
     command: string,
     context: any,
+    requestedModel?: string,
   ): Promise<{
     success: boolean;
     operation?: any;
@@ -156,6 +214,7 @@ export class AIService {
       }
 
       const compactContext = this.buildCompactCommandContext(context);
+      const validTypes = this.supportedComponentTypes.join(", ");
       const prompt = `You are an AI assistant for a website builder.
     
 User command: "${command}"
@@ -170,6 +229,7 @@ Analyze the command. Determine if the user wants to:
 Response format:
 {
   "action": "insert" | "update" | "delete" | "move" | "generate_full_html",
+  "reason": "Short explanation",
   "component": {
     "type": "ComponentType",
     "props": {...},
@@ -178,13 +238,23 @@ Response format:
   "prompt": "Full description for HTML generation if action is generate_full_html"
 }
 
-VALID COMPONENT TYPES (only use these for insert/update): 
-HeroBanner, TextBlock, Spacer, Container, AboutSection, Statistics, FacultyGrid, FAQAccordion, ContactForm, FeedbackForm, Image, DynamicSection, Button, RawHTML.
+VALID COMPONENT TYPES (only use these for insert/update):
+${validTypes}
 CRITICAL: If the user says "full", "website", or "html page", DO NOT use "insert". USE "generate_full_html".
+Placement rules:
+- "at end" or "bottom" => position "append"
+- "at top" or "start" => position "prepend"
+- "after section 2" => position 2 (number)
+- If not specified => position "append"
 
 Only respond with valid JSON, no explanations.`;
 
-      const responseText = await this.getChatCompletion(prompt, true);
+      const { model, provider } = this.resolveModel(requestedModel);
+      let responseText = await this.callModel(provider, model, prompt, true);
+      responseText = responseText
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/gi, "")
+        .trim();
       console.log("AI Raw Response:", responseText);
       const jsonOperation = JSON.parse(responseText);
 
@@ -204,26 +274,22 @@ Only respond with valid JSON, no explanations.`;
       // If it's an insert with an unknown type, convert it to generate_full_html
       if (
         jsonOperation.action === "insert" &&
-        ![
-          "HeroBanner",
-          "TextBlock",
-          "Spacer",
-          "Container",
-          "AboutSection",
-          "Statistics",
-          "FacultyGrid",
-          "FAQAccordion",
-          "ContactForm",
-          "FeedbackForm",
-          "Image",
-          "DynamicSection",
-          "Button",
-          "RawHTML",
-        ].includes(jsonOperation.component?.type)
+        !this.supportedComponentTypes.includes(jsonOperation.component?.type)
       ) {
         console.log("Unknown component type, reverting to generate_full_html");
         jsonOperation.action = "generate_full_html";
         jsonOperation.prompt = command;
+      }
+
+      if (jsonOperation.action === "insert" && jsonOperation.component) {
+        const commandText = lowerCommand;
+        if (/\b(at\s+top|at\s+start|on\s+top)\b/i.test(commandText)) {
+          jsonOperation.component.position = "prepend";
+        } else if (
+          /\b(at\s+end|at\s+bottom|to\s+the\s+end|last)\b/i.test(commandText)
+        ) {
+          jsonOperation.component.position = "append";
+        }
       }
 
       console.log(
@@ -480,7 +546,10 @@ Only respond with valid JSON.`;
   }
 
   // Generate a new component using Groq
-  async generateComponent(prompt: string): Promise<{
+  async generateComponent(
+    prompt: string,
+    requestedModel?: string,
+  ): Promise<{
     success: boolean;
     component?: {
       name: string;
@@ -491,14 +560,6 @@ Only respond with valid JSON.`;
     };
     error?: string;
   }> {
-    if (!this.groq) {
-      throw new AppError(
-        "Groq AI service not configured",
-        503,
-        "AI_NOT_CONFIGURED",
-      );
-    }
-
     try {
       const systemPrompt = `You are an expert React and Craft.js developer.
 Generate a new reusable component based on the user's request.
@@ -524,19 +585,17 @@ You can use these existing types: HeroBanner, TextBlock, Container, AboutSection
 If the component requested doesn't fit the others, use "RawHTML" and put the full HTML/Tailwind code in the "html" prop.
 Only return valid JSON. Do not include markdown code blocks or explanations.`;
 
+      const { model, provider } = this.resolveModel(requestedModel);
       console.log(
-        `Generating component with Groq using model: llama-3.3-70b-versatile`,
+        `Generating component with ${provider} using model: ${model}`,
       );
-      const response = await this.groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-      });
 
-      const responseText = response.choices[0].message.content || "{}";
+      const responseText = await this.callModel(
+        provider,
+        model,
+        `${systemPrompt}\n\nUser request:\n${prompt}`,
+        true,
+      );
       const componentData = JSON.parse(responseText);
 
       return {

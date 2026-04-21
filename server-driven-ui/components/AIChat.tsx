@@ -197,7 +197,7 @@ export const AIChat = ({
     null,
   );
   const [selectedModel, setSelectedModel] = useState<string>(
-    "llama-3.3-70b-versatile",
+    "claude-3-5-sonnet-20241022",
   );
   const [suggestions, setSuggestions] = useState<
     {
@@ -255,6 +255,14 @@ export const AIChat = ({
     }
 
     try {
+      if (query.node("ROOT").isCanvas()) {
+        return "ROOT";
+      }
+    } catch {
+      // Continue to fallback lookup.
+    }
+
+    try {
       const rootNode = query.node("ROOT").get() as Record<string, any> | null;
       const rootChildren = Array.isArray(rootNode?.data?.nodes)
         ? rootNode.data.nodes
@@ -271,6 +279,68 @@ export const AIChat = ({
     }
 
     return "ROOT";
+  };
+
+  const addComponentToCanvas = (
+    Component: React.ComponentType<Record<string, unknown>>,
+    props: Record<string, any>,
+    position?: "append" | "prepend" | number | string,
+  ) => {
+    const element = React.createElement(Component, props);
+    const primaryTargetId = getInsertionTargetId();
+    const primaryIndex = resolveInsertionIndex(primaryTargetId, position);
+
+    try {
+      actions.add(query.createNode(element), primaryTargetId, primaryIndex);
+      return { ok: true as const, targetId: primaryTargetId };
+    } catch (primaryError) {
+      try {
+        const fallbackIndex = resolveInsertionIndex("ROOT", "append");
+        actions.add(query.createNode(element), "ROOT", fallbackIndex);
+        return {
+          ok: true as const,
+          targetId: "ROOT",
+          fallback: true as const,
+          primaryError,
+        };
+      } catch (fallbackError) {
+        return {
+          ok: false as const,
+          targetId: primaryTargetId,
+          primaryError,
+          fallbackError,
+        };
+      }
+    }
+  };
+
+  const resolveInsertionIndex = (
+    targetId: string,
+    position: "append" | "prepend" | number | string | undefined,
+  ): number | undefined => {
+    try {
+      const targetNode = query.node(targetId).get() as Record<string, any>;
+      const childCount = Array.isArray(targetNode?.data?.nodes)
+        ? targetNode.data.nodes.length
+        : 0;
+
+      if (position === "prepend") {
+        return 0;
+      }
+
+      if (position === "append" || position == null) {
+        return childCount;
+      }
+
+      const maybeNumber = Number(position);
+      if (Number.isFinite(maybeNumber)) {
+        return Math.max(0, Math.min(childCount, Math.floor(maybeNumber)));
+      }
+    } catch {
+      return undefined;
+    }
+
+    return undefined;
   };
 
   const craftToPageJSON = () => {
@@ -481,6 +551,7 @@ export const AIChat = ({
     const response = await aiApi.processCommand(
       userMessage,
       buildCompactCommandContext(),
+      selectedModel,
     );
 
     if (!response.success || !response.data) {
@@ -533,7 +604,7 @@ export const AIChat = ({
     }
 
     if (operation.action === "insert" && operation.component) {
-      const { type, props } = operation.component;
+      const { type, props, position } = operation.component;
       const finalProps = shouldForceEmptyTextComponent(userMessage, type)
         ? buildEmptyTextProps(props || {})
         : { ...(props || {}) };
@@ -544,13 +615,29 @@ export const AIChat = ({
       const Component = typeKey ? ComponentMapper[typeKey] : null;
 
       if (Component) {
-        const targetId = getInsertionTargetId();
         const safeProps = sanitizeAiComponentProps(finalProps);
-        actions.add(
-          query.createNode(React.createElement(Component, safeProps)),
-          targetId,
-        );
-        toast.success(`Added ${type} component!`);
+        const addResult = addComponentToCanvas(Component, safeProps, position);
+
+        if (addResult.ok) {
+          toast.success(
+            addResult.fallback
+              ? `Added ${type} component (fallback canvas)`
+              : `Added ${type} component!`,
+          );
+          if (addResult.fallback) {
+            console.warn(
+              "Primary canvas insert failed; inserted into ROOT instead.",
+              addResult.primaryError,
+            );
+          }
+        } else {
+          console.error("Failed to add AI component", {
+            targetId: addResult.targetId,
+            primaryError: addResult.primaryError,
+            fallbackError: addResult.fallbackError,
+          });
+          toast.error(`Could not add ${type}. Try selecting the main canvas.`);
+        }
       } else if (
         String(type).toLowerCase().includes("template") ||
         String(type).toLowerCase().includes("page")
@@ -701,7 +788,10 @@ export const AIChat = ({
           await runCommandFlow(userMessage, memoryData);
         } else {
           try {
-            const response = await aiApi.generateComponent(userMessage);
+            const response = await aiApi.generateComponent(
+              userMessage,
+              selectedModel,
+            );
             if (response.success && response.data) {
               window.dispatchEvent(new CustomEvent("customComponentGenerated"));
               setMessages((prev) => [
