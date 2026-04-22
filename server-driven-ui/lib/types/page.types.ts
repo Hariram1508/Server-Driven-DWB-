@@ -12,6 +12,12 @@ export interface PageMeta {
   ogImage?: string;
 }
 
+export interface PageSEOSettings {
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+}
+
 export interface PageJSON {
   components: ComponentNode[];
   meta?: PageMeta;
@@ -23,9 +29,13 @@ export interface Page {
   name: string;
   slug: string;
   jsonConfig: PageJSON;
+  seo?: PageSEOSettings;
   htmlContent?: string;
   useHtml: boolean;
   isPublished: boolean;
+  scheduledPublishAt?: string | null;
+  scheduledUnpublishAt?: string | null;
+  lastPublishedAt?: string | null;
   version: string;
   orderIndex?: number;
   createdAt: string;
@@ -47,8 +57,20 @@ export interface UpdatePageData {
   name?: string;
   slug?: string;
   jsonConfig?: PageJSON;
+  seo?: PageSEOSettings;
   htmlContent?: string;
   useHtml?: boolean;
   orderIndex?: number;
+  scheduledPublishAt?: string | null;
+  scheduledUnpublishAt?: string | null;
   changes?: string;
+}
+
+export type BatchPageAction = "publish" | "unpublish" | "duplicate" | "delete";
+
+export interface BatchPagePayload {
+  action: BatchPageAction;
+  pageIds: string[];
+  duplicatePrefix?: string;
+  duplicateSuffix?: string;
 }

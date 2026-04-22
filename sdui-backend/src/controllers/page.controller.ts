@@ -57,9 +57,12 @@ export class PageController {
       name,
       slug,
       jsonConfig,
+      seo,
       htmlContent,
       useHtml,
       orderIndex,
+      scheduledPublishAt,
+      scheduledUnpublishAt,
       changes,
     } = req.body;
 
@@ -67,11 +70,40 @@ export class PageController {
       id,
       req.user.institutionId,
       req.user.userId,
-      { name, slug, jsonConfig, htmlContent, useHtml, orderIndex },
+      {
+        name,
+        slug,
+        jsonConfig,
+        seo,
+        htmlContent,
+        useHtml,
+        orderIndex,
+        scheduledPublishAt,
+        scheduledUnpublishAt,
+      },
       changes,
     );
 
     return sendSuccess(res, page, "Page updated successfully");
+  });
+
+  // Schedule publish and unpublish
+  schedulePage = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { id } = req.params;
+    const { publishAt, unpublishAt } = req.body;
+
+    const result = await pageService.schedulePage(
+      id,
+      req.user.institutionId,
+      req.user.userId,
+      { publishAt, unpublishAt },
+    );
+
+    return sendSuccess(res, result, "Page schedule updated");
   });
 
   // Publish page
@@ -136,6 +168,47 @@ export class PageController {
     );
 
     return sendSuccess(res, page, "Page duplicated successfully", 201);
+  });
+
+  // Batch page operations
+  batchOperation = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { action, pageIds, duplicatePrefix, duplicateSuffix } = req.body;
+
+    const result = await pageService.batchOperation(req.user.institutionId, {
+      action,
+      pageIds,
+      userId: req.user.userId,
+      duplicatePrefix,
+      duplicateSuffix,
+    });
+
+    return sendSuccess(res, result, "Batch operation completed");
+  });
+
+  // Save page as reusable template
+  saveAsTemplate = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      return sendError(res, "Unauthorized", 401);
+    }
+
+    const { id } = req.params;
+    const { name, description, category, isPublic } = req.body;
+
+    const template = await pageService.savePageAsTemplate({
+      pageId: id,
+      institutionId: req.user.institutionId,
+      userId: req.user.userId,
+      name,
+      description,
+      category,
+      isPublic,
+    });
+
+    return sendSuccess(res, template, "Template created from page", 201);
   });
 
   // Get all published pages (public)

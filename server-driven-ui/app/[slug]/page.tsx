@@ -1,245 +1,97 @@
-"use client";
+import type { Metadata } from "next";
+import PageClient from "./PageClient";
 
-import React, { useEffect, useState, use } from "react";
-import { useSearchParams } from "next/navigation";
-import { Editor, Frame, Element } from "@craftjs/core";
-import { ComponentMapper } from "@/components/renderer/ComponentMapper";
-import * as pagesApi from "@/lib/api/pages.api";
-import * as publicPagesApi from "@/lib/api/public.api";
-import { useAuth } from "@/lib/context/AuthContext";
-import { toast } from "sonner";
-import { Container } from "@/components/builder-components/Container";
-import { ArrowLeft, Edit3 } from "lucide-react";
-import { Page } from "@/lib/types/page.types";
-import { SafeHTMLRenderer } from "@/components/editor/SafeHTMLRenderer";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api";
 
-interface PageProps {
-  params: Promise<{ slug: string }>;
+type RouteParams = Promise<{ slug: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+interface PageRouteProps {
+  params: RouteParams;
+  searchParams?: SearchParams;
 }
 
-// ── Renders AI-generated HTML in a perfectly isolated full-page viewport ─────
-// Navigation links inside the iframe are intercepted by SafeHTMLRenderer's
-// script and sent to window.top so the full Next.js app navigates properly.
-const FullPageRenderer = ({ html }: { html: string }) => (
-  <div className="fixed inset-0 w-screen h-screen bg-white overflow-hidden">
-    <a
-      href="/#pages"
-      className="fixed top-4 left-4 z-60 inline-flex items-center gap-2 rounded-xl bg-white/90 px-4 py-2 text-xs font-bold text-gray-700 shadow-md ring-1 ring-black/5 backdrop-blur hover:bg-white"
-    >
-      <ArrowLeft className="h-4 w-4" />
-      Back to projects
-    </a>
-    <SafeHTMLRenderer html={html} fullPage className="w-full h-full" />
-  </div>
-);
+interface PageSeoPayload {
+  name?: string;
+  slug?: string;
+  seo?: {
+    metaTitle?: string;
+    metaDescription?: string;
+    canonicalUrl?: string;
+  };
+}
 
-export default function DynamicPage({ params }: PageProps) {
-  const { slug } = use(params);
-  const searchParams = useSearchParams();
-  const { user, isLoading: authLoading } = useAuth();
-  const [pageData, setPageData] = useState<any>(null);
-  const [allPages, setAllPages] = useState<Page[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isProjectMissingPage, setIsProjectMissingPage] = useState(false);
+async function fetchPublishedPage(slug: string, institutionId?: string) {
+  const url = new URL(`${API_BASE}/public/pages/${encodeURIComponent(slug)}`);
 
-  const normalizedSlug = decodeURIComponent(slug || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  if (institutionId) {
+    url.searchParams.set("institutionId", institutionId);
+  }
 
-  const suggestedName = normalizedSlug
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-  const createPageHref = `/dashboard?create=1&slug=${encodeURIComponent(normalizedSlug)}&name=${encodeURIComponent(suggestedName || normalizedSlug || "New Page")}`;
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: institutionId ? { "x-institution-id": institutionId } : undefined,
+  });
 
-  const scopedInstitutionId =
-    searchParams.get("institutionId")?.trim() || user?.institutionId;
+  if (!response.ok) {
+    return null;
+  }
 
-  useEffect(() => {
-    if (authLoading) return;
+  const payload = await response.json();
+  return (payload?.data ?? null) as PageSeoPayload | null;
+}
 
-    // Reset immediately so the old page never flashes while the new one loads
-    setLoading(true);
-    setPageData(null);
-    setIsProjectMissingPage(false);
+function resolveSearchParam(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
 
-    const fetchData = async () => {
-      try {
-        const institutionId = scopedInstitutionId;
-        let data;
-        let isPublicPage = true;
+  return value;
+}
 
-        try {
-          data = await publicPagesApi.getPublishedPageBySlug(
-            normalizedSlug,
-            institutionId,
-          );
-        } catch (publicError) {
-          const canUsePrivatePreview =
-            !!user &&
-            (user.role === "admin" ||
-              user.role === "editor" ||
-              user.role === "super-admin") &&
-            user.institutionId;
+function buildMetadata(page: PageSeoPayload | null, slug: string): Metadata {
+  const title = page?.seo?.metaTitle || page?.name || slug;
+  const description =
+    page?.seo?.metaDescription || `Published page for ${page?.name || slug}.`;
 
-          if (!canUsePrivatePreview) {
-            throw publicError;
-          }
-
-          data = await pagesApi.getPageBySlug(
-            normalizedSlug,
-            user.institutionId,
-          );
-          isPublicPage = false;
+  return {
+    title,
+    description,
+    alternates: page?.seo?.canonicalUrl
+      ? {
+          canonical: page.seo.canonicalUrl,
         }
+      : undefined,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
 
-        setPageData(data);
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PageRouteProps): Promise<Metadata> {
+  const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const institutionId = resolvedSearchParams
+    ? resolveSearchParam(resolvedSearchParams.institutionId)
+    : undefined;
 
-        // Only fetch all pages for block-mode (HTML pages have their own navbar)
-        if (!data?.useHtml) {
-          const pages = isPublicPage
-            ? await publicPagesApi.getPublishedPages(institutionId)
-            : await pagesApi.getAllPages();
-          setAllPages(pages);
-        }
-      } catch (error) {
-        const status = (error as any)?.response?.status;
-        const message =
-          (error as any)?.response?.data?.error?.message ||
-          (error as any)?.response?.data?.message ||
-          (error as any)?.message ||
-          "";
-        const isExpectedMissing =
-          status === 404 ||
-          status === 400 ||
-          message.includes("PROJECT_SCOPE_REQUIRED");
+  const page = await fetchPublishedPage(slug, institutionId);
+  return buildMetadata(page, slug);
+}
 
-        if (!isExpectedMissing) {
-          console.error("Failed to fetch page:", error);
-          toast.error("Unable to load page right now");
-        }
-        setIsProjectMissingPage(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [slug, scopedInstitutionId, user, authLoading]);
-
-  if (loading || authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-          <p className="text-gray-500 font-medium">Loading your website...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isProjectMissingPage) {
-    const canCreate =
-      !!user &&
-      (user.role === "admin" ||
-        user.role === "editor" ||
-        user.role === "super-admin");
-
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="w-full max-w-xl rounded-3xl border border-gray-100 bg-white p-8 shadow-sm text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400 mb-3">
-            Project Scope Protection
-          </p>
-          <h1 className="text-2xl font-black text-gray-900 mb-3">
-            Page Not Found In This Project
-          </h1>
-          <p className="text-sm text-gray-500 leading-relaxed mb-6">
-            The link{" "}
-            <span className="font-mono text-gray-700">/{normalizedSlug}</span>{" "}
-            does not belong to your current project pages. Cross-project
-            redirects are blocked.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <a
-              href="/dashboard"
-              className="h-11 px-5 rounded-xl border border-gray-200 bg-white text-gray-700 text-sm font-bold inline-flex items-center"
-            >
-              Go To Dashboard
-            </a>
-            {canCreate && (
-              <a
-                href={createPageHref}
-                className="h-11 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold inline-flex items-center"
-              >
-                Create New Design
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const isAdmin = !!(
-    user &&
-    (user.role === "admin" ||
-      user.role === "editor" ||
-      user.role === "super-admin")
-  );
-
-  // ── HTML mode (AI-generated full page) ───────────────────────────────────
-  if (pageData?.useHtml && pageData?.htmlContent) {
-    return <FullPageRenderer html={pageData.htmlContent} />;
-  }
-
-  // ── Admin shortcut to block editor ───────────────────────────────────────
-  if (isAdmin && !pageData?.jsonConfig?.ROOT) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center space-y-4 p-8">
-          <div className="w-16 h-16 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto">
-            <Edit3 className="w-8 h-8 text-violet-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900">Open in Editor</h2>
-          <a
-            href={`/edit/${slug}`}
-            className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white font-bold px-6 py-3 rounded-xl transition-all hover:scale-105"
-          >
-            <Edit3 className="w-4 h-4" />
-            Open Editor
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Public CraftJS block view ─────────────────────────────────────────────
-  return (
-    <div className="min-h-screen bg-white">
-      <div className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 px-4 py-3 backdrop-blur">
-        <a
-          href="/#pages"
-          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to projects
-        </a>
-      </div>
-      <Editor enabled={false} resolver={ComponentMapper}>
-        <Frame
-          data={
-            pageData?.jsonConfig?.ROOT
-              ? JSON.stringify(pageData.jsonConfig)
-              : undefined
-          }
-        >
-          <Element is={Container} canvas />
-        </Frame>
-      </Editor>
-    </div>
-  );
+export default async function DynamicPage({ params }: PageRouteProps) {
+  const { slug } = await params;
+  return <PageClient slug={slug} />;
 }

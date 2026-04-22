@@ -1,12 +1,136 @@
 import { Page, IPage } from "../models/Page.model";
 import { Version } from "../models/Version.model";
+import { Template, ITemplate } from "../models/Template.model";
 import aiService from "./ai.service";
 import { AppError } from "../middleware/error.middleware";
-import { PageJSON } from "../types/page.types";
+import { PageJSON, PageSEOSettings } from "../types/page.types";
+
+type BatchPageAction = "publish" | "unpublish" | "duplicate" | "delete";
+
+interface BatchOperationInput {
+  action: BatchPageAction;
+  pageIds: string[];
+  userId: string;
+  duplicatePrefix?: string;
+  duplicateSuffix?: string;
+}
+
+interface ScheduleInput {
+  publishAt?: string | Date | null;
+  unpublishAt?: string | Date | null;
+}
+
+interface PageScheduleResult {
+  page: IPage;
+  scheduleSummary: string;
+}
 
 export class PageService {
+  private normalizeDateInput(value?: string | Date | null): Date | null {
+    if (value === undefined) {
+      return null;
+    }
+
+    if (value === null) {
+      return null;
+    }
+
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError(
+        "Invalid scheduling date",
+        400,
+        "INVALID_SCHEDULE_DATE",
+      );
+    }
+
+    return parsed;
+  }
+
+  private async applyScheduledTransitions(
+    institutionId?: string,
+  ): Promise<void> {
+    const now = new Date();
+    const baseFilter = institutionId ? { institutionId } : {};
+
+    await Page.updateMany(
+      {
+        ...baseFilter,
+        isPublished: false,
+        scheduledPublishAt: { $ne: null, $lte: now },
+      },
+      {
+        $set: {
+          isPublished: true,
+          lastPublishedAt: now,
+          scheduledPublishAt: null,
+        },
+      },
+    );
+
+    await Page.updateMany(
+      {
+        ...baseFilter,
+        isPublished: true,
+        scheduledUnpublishAt: { $ne: null, $lte: now },
+      },
+      {
+        $set: {
+          isPublished: false,
+          scheduledUnpublishAt: null,
+        },
+      },
+    );
+  }
+
+  private async ensureUniqueSlug(
+    institutionId: string,
+    requestedSlug: string,
+  ): Promise<string> {
+    const baseSlug = requestedSlug
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 70);
+
+    if (!baseSlug) {
+      throw new AppError("Invalid slug", 400, "INVALID_SLUG");
+    }
+
+    const initialMatch = await Page.findOne({ institutionId, slug: baseSlug })
+      .select("_id")
+      .lean();
+    if (!initialMatch) {
+      return baseSlug;
+    }
+
+    let counter = 1;
+    while (counter < 9999) {
+      const candidate = `${baseSlug}-${counter}`;
+      const duplicate = await Page.findOne({ institutionId, slug: candidate })
+        .select("_id")
+        .lean();
+
+      if (!duplicate) {
+        return candidate;
+      }
+
+      counter += 1;
+    }
+
+    throw new AppError(
+      "Could not generate unique slug",
+      409,
+      "SLUG_GENERATION_FAILED",
+    );
+  }
+
   // Get all pages for an institution
   async getAllPages(institutionId: string): Promise<IPage[]> {
+    await this.applyScheduledTransitions(institutionId);
+
     const pages = await Page.find({ institutionId })
       .sort({ orderIndex: -1, updatedAt: -1 })
       .populate("updatedBy", "name email");
@@ -40,6 +164,8 @@ export class PageService {
 
   // Get page by ID
   async getPageById(pageId: string, institutionId: string): Promise<IPage> {
+    await this.applyScheduledTransitions(institutionId);
+
     const page = await Page.findOne({ _id: pageId, institutionId }).populate(
       "updatedBy",
       "name email",
@@ -54,6 +180,8 @@ export class PageService {
 
   // Get page by slug
   async getPageBySlug(slug: string, institutionId: string): Promise<IPage> {
+    await this.applyScheduledTransitions(institutionId);
+
     const page = await Page.findOne({ slug, institutionId });
 
     if (!page) {
@@ -71,7 +199,6 @@ export class PageService {
     userId: string;
     useHtml?: boolean;
   }): Promise<IPage> {
-    // Check if slug already exists
     const existingPage = await Page.findOne({
       institutionId: data.institutionId,
       slug: data.slug,
@@ -94,7 +221,6 @@ export class PageService {
 
     const nextOrderIndex = (highestOrderPage?.orderIndex ?? 0) + 1;
 
-    // Create page with default config
     const page = await Page.create({
       institutionId: data.institutionId,
       name: data.name,
@@ -117,13 +243,18 @@ export class PageService {
           linkedNodes: {},
         },
       },
+      seo: {
+        metaTitle: data.name,
+        metaDescription: "",
+        canonicalUrl: `/${data.slug}`,
+      },
       useHtml: !!data.useHtml,
       isPublished: true,
+      lastPublishedAt: new Date(),
       orderIndex: nextOrderIndex,
       updatedBy: data.userId,
     });
 
-    // Create initial version
     await Version.create({
       pageId: page._id,
       versionNumber: 1,
@@ -135,7 +266,7 @@ export class PageService {
     return page;
   }
 
-  // Update page JSON config or HTML content
+  // Update page JSON config, HTML content, SEO, or ordering
   async updatePage(
     pageId: string,
     institutionId: string,
@@ -144,9 +275,12 @@ export class PageService {
       name?: string;
       slug?: string;
       jsonConfig?: PageJSON;
+      seo?: PageSEOSettings;
       htmlContent?: string;
       useHtml?: boolean;
       orderIndex?: number;
+      scheduledPublishAt?: string | Date | null;
+      scheduledUnpublishAt?: string | Date | null;
     },
     changes?: string,
   ): Promise<IPage> {
@@ -172,7 +306,6 @@ export class PageService {
       }
     }
 
-    // Update page
     if (data.name !== undefined) page.name = data.name;
     if (data.slug !== undefined) page.slug = data.slug;
     if (data.jsonConfig) page.jsonConfig = data.jsonConfig;
@@ -180,10 +313,41 @@ export class PageService {
     if (data.useHtml !== undefined) page.useHtml = data.useHtml;
     if (data.orderIndex !== undefined) page.orderIndex = data.orderIndex;
 
-    page.updatedBy = userId as any;
+    if (data.seo) {
+      page.seo = {
+        ...page.seo,
+        ...data.seo,
+      };
+    }
+
+    const nextPublishAt =
+      data.scheduledPublishAt !== undefined
+        ? this.normalizeDateInput(data.scheduledPublishAt)
+        : (page.scheduledPublishAt ?? null);
+    const nextUnpublishAt =
+      data.scheduledUnpublishAt !== undefined
+        ? this.normalizeDateInput(data.scheduledUnpublishAt)
+        : (page.scheduledUnpublishAt ?? null);
+
+    if (nextPublishAt && nextUnpublishAt && nextUnpublishAt <= nextPublishAt) {
+      throw new AppError(
+        "Unpublish schedule must be after publish schedule",
+        400,
+        "INVALID_SCHEDULE_RANGE",
+      );
+    }
+
+    if (data.scheduledPublishAt !== undefined) {
+      page.scheduledPublishAt = nextPublishAt;
+    }
+
+    if (data.scheduledUnpublishAt !== undefined) {
+      page.scheduledUnpublishAt = nextUnpublishAt;
+    }
+
+    page.updatedBy = userId as unknown as IPage["updatedBy"];
     await page.save();
 
-    // Create new version
     const latestVersion = await Version.findOne({ pageId }).sort({
       versionNumber: -1,
     });
@@ -201,6 +365,36 @@ export class PageService {
     });
 
     return page;
+  }
+
+  async schedulePage(
+    pageId: string,
+    institutionId: string,
+    userId: string,
+    data: ScheduleInput,
+  ): Promise<PageScheduleResult> {
+    const page = await this.updatePage(
+      pageId,
+      institutionId,
+      userId,
+      {
+        scheduledPublishAt: data.publishAt,
+        scheduledUnpublishAt: data.unpublishAt,
+      },
+      "Updated publish schedule",
+    );
+
+    const publishLabel = page.scheduledPublishAt
+      ? `Publish at ${page.scheduledPublishAt.toISOString()}`
+      : "No publish schedule";
+    const unpublishLabel = page.scheduledUnpublishAt
+      ? `Unpublish at ${page.scheduledUnpublishAt.toISOString()}`
+      : "No unpublish schedule";
+
+    return {
+      page,
+      scheduleSummary: `${publishLabel}. ${unpublishLabel}.`,
+    };
   }
 
   // Publish page
@@ -244,6 +438,8 @@ export class PageService {
     }
 
     page.isPublished = true;
+    page.lastPublishedAt = new Date();
+    page.scheduledPublishAt = null;
     await page.save();
 
     await aiService.recordComplianceAudit({
@@ -274,6 +470,7 @@ export class PageService {
     }
 
     page.isPublished = false;
+    page.scheduledUnpublishAt = null;
     await page.save();
 
     await aiService.recordComplianceAudit({
@@ -290,6 +487,115 @@ export class PageService {
     return page;
   }
 
+  async batchOperation(
+    institutionId: string,
+    input: BatchOperationInput,
+  ): Promise<{ action: BatchPageAction; affected: number; pages?: IPage[] }> {
+    if (!input.pageIds.length) {
+      throw new AppError("No pages selected", 400, "NO_PAGE_SELECTION");
+    }
+
+    const scopedPages = await Page.find({
+      _id: { $in: input.pageIds },
+      institutionId,
+    });
+
+    if (!scopedPages.length) {
+      throw new AppError("No matching pages found", 404, "PAGES_NOT_FOUND");
+    }
+
+    switch (input.action) {
+      case "publish": {
+        await Promise.all(
+          scopedPages.map((page) =>
+            this.publishPage(page._id.toString(), institutionId, input.userId),
+          ),
+        );
+        return { action: input.action, affected: scopedPages.length };
+      }
+      case "unpublish": {
+        await Promise.all(
+          scopedPages.map((page) =>
+            this.unpublishPage(
+              page._id.toString(),
+              institutionId,
+              input.userId,
+            ),
+          ),
+        );
+        return { action: input.action, affected: scopedPages.length };
+      }
+      case "delete": {
+        await Promise.all(
+          scopedPages.map((page) =>
+            this.deletePage(page._id.toString(), institutionId),
+          ),
+        );
+        return { action: input.action, affected: scopedPages.length };
+      }
+      case "duplicate": {
+        const duplicates: IPage[] = [];
+
+        for (const page of scopedPages) {
+          const requestedName = `${input.duplicatePrefix?.trim() || "Copy"} ${page.name}${input.duplicateSuffix?.trim() ? ` ${input.duplicateSuffix.trim()}` : ""}`;
+          const requestedSlug = await this.ensureUniqueSlug(
+            institutionId,
+            `${page.slug}-copy`,
+          );
+
+          const duplicate = await this.duplicatePage(
+            page._id.toString(),
+            institutionId,
+            input.userId,
+            requestedName,
+            requestedSlug,
+          );
+
+          duplicates.push(duplicate);
+        }
+
+        return {
+          action: input.action,
+          affected: duplicates.length,
+          pages: duplicates,
+        };
+      }
+      default:
+        throw new AppError("Invalid batch action", 400, "INVALID_BATCH_ACTION");
+    }
+  }
+
+  async savePageAsTemplate(data: {
+    pageId: string;
+    institutionId: string;
+    userId: string;
+    name: string;
+    description?: string;
+    category?: string;
+    isPublic?: boolean;
+  }): Promise<ITemplate> {
+    const page = await Page.findOne({
+      _id: data.pageId,
+      institutionId: data.institutionId,
+    });
+
+    if (!page) {
+      throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
+    }
+
+    const template = await Template.create({
+      name: data.name,
+      description: data.description || `Saved from page ${page.name}`,
+      category: data.category || "custom",
+      thumbnail: "",
+      jsonConfig: page.jsonConfig,
+      isPublic: !!data.isPublic,
+      createdBy: data.userId,
+    });
+
+    return template;
+  }
+
   // Delete page
   async deletePage(pageId: string, institutionId: string): Promise<void> {
     const page = await Page.findOne({ _id: pageId, institutionId });
@@ -298,10 +604,7 @@ export class PageService {
       throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
-    // Delete all versions
     await Version.deleteMany({ pageId });
-
-    // Delete page
     await page.deleteOne();
   }
 
@@ -319,7 +622,6 @@ export class PageService {
       throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
     }
 
-    // Check if new slug already exists
     const existingPage = await Page.findOne({
       institutionId,
       slug: newSlug,
@@ -333,13 +635,18 @@ export class PageService {
       );
     }
 
-    // Create duplicate
     const duplicatePage = await Page.create({
       institutionId,
       name: newName,
       slug: newSlug,
       jsonConfig: originalPage.jsonConfig,
+      seo: {
+        ...originalPage.seo,
+        canonicalUrl: `/${newSlug}`,
+      },
       isPublished: false,
+      scheduledPublishAt: null,
+      scheduledUnpublishAt: null,
       orderIndex:
         ((
           await Page.findOne({ institutionId })
@@ -350,7 +657,6 @@ export class PageService {
       updatedBy: userId,
     });
 
-    // Create initial version
     await Version.create({
       pageId: duplicatePage._id,
       versionNumber: 1,
@@ -364,11 +670,14 @@ export class PageService {
 
   // Get published pages (public)
   async getPublishedPages(institutionId?: string): Promise<IPage[]> {
+    await this.applyScheduledTransitions(institutionId);
+
     const query = institutionId
       ? { institutionId, isPublished: true }
       : { isPublished: true };
+
     return Page.find(query)
-      .select("name slug jsonConfig htmlContent useHtml institutionId")
+      .select("name slug jsonConfig seo htmlContent useHtml institutionId")
       .sort({ orderIndex: -1, updatedAt: -1 });
   }
 
@@ -377,11 +686,13 @@ export class PageService {
     slug: string,
     institutionId: string,
   ): Promise<IPage> {
+    await this.applyScheduledTransitions(institutionId);
+
     const page = await Page.findOne({
       slug,
       institutionId,
       isPublished: true,
-    }).select("name slug jsonConfig htmlContent useHtml");
+    }).select("name slug jsonConfig seo htmlContent useHtml");
 
     if (!page) {
       throw new AppError("Page not found", 404, "PAGE_NOT_FOUND");
@@ -392,8 +703,10 @@ export class PageService {
 
   // Get any published page by slug globally (cross-institution lookup)
   async getPageBySlugGlobal(slug: string): Promise<IPage> {
+    await this.applyScheduledTransitions();
+
     const page = await Page.findOne({ slug, isPublished: true }).select(
-      "name slug jsonConfig htmlContent useHtml institutionId",
+      "name slug jsonConfig seo htmlContent useHtml institutionId",
     );
 
     if (!page) {

@@ -42,6 +42,12 @@ import {
   Download,
   AlertTriangle,
   ShieldCheck,
+  CalendarClock,
+  CheckSquare,
+  Square,
+  Files,
+  Settings2,
+  Save,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
@@ -894,6 +900,251 @@ const RenamePageModal = ({
   );
 };
 
+const SeoSettingsModal = ({
+  isOpen,
+  page,
+  onClose,
+  onSave,
+  saving,
+}: {
+  isOpen: boolean;
+  page: Page | null;
+  onClose: () => void;
+  onSave: (payload: {
+    metaTitle: string;
+    metaDescription: string;
+    canonicalUrl: string;
+  }) => void;
+  saving: boolean;
+}) => {
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [canonicalUrl, setCanonicalUrl] = useState("");
+
+  useEffect(() => {
+    if (!isOpen || !page) return;
+    setMetaTitle(page.seo?.metaTitle || page.name);
+    setMetaDescription(page.seo?.metaDescription || "");
+    setCanonicalUrl(page.seo?.canonicalUrl || `/${page.slug}`);
+  }, [isOpen, page]);
+
+  if (!isOpen || !page) return null;
+
+  return (
+    <div className="fixed inset-0 z-[180] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">SEO Settings</h3>
+            <p className="text-sm text-slate-500">
+              Configure metadata and SERP presentation
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-slate-50 text-slate-400"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-black tracking-wide uppercase text-slate-400">
+              Meta Title
+            </label>
+            <input
+              value={metaTitle}
+              onChange={(e) => setMetaTitle(e.target.value.slice(0, 70))}
+              className="w-full h-11 px-4 rounded-xl border border-slate-200"
+              placeholder="Page title in search results"
+            />
+            <p className="text-[11px] text-slate-400">
+              {metaTitle.length}/70 characters
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-black tracking-wide uppercase text-slate-400">
+              Meta Description
+            </label>
+            <textarea
+              value={metaDescription}
+              onChange={(e) => setMetaDescription(e.target.value.slice(0, 160))}
+              className="w-full h-24 px-4 py-3 rounded-xl border border-slate-200 resize-none"
+              placeholder="Brief page summary for search engines"
+            />
+            <p className="text-[11px] text-slate-400">
+              {metaDescription.length}/160 characters
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-black tracking-wide uppercase text-slate-400">
+              Canonical URL
+            </label>
+            <input
+              value={canonicalUrl}
+              onChange={(e) => setCanonicalUrl(e.target.value)}
+              className="w-full h-11 px-4 rounded-xl border border-slate-200 font-mono text-sm"
+              placeholder="/your-page-slug"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+              SERP Preview
+            </p>
+            <p className="text-sm text-blue-700 font-medium truncate">
+              {(canonicalUrl || `/${page.slug}`).startsWith("http")
+                ? canonicalUrl || `/${page.slug}`
+                : `https://example.edu${canonicalUrl || `/${page.slug}`}`}
+            </p>
+            <p className="text-lg text-blue-900 font-semibold leading-snug truncate">
+              {metaTitle || page.name}
+            </p>
+            <p className="text-sm text-slate-600 leading-relaxed line-clamp-2">
+              {metaDescription ||
+                "Add a concise summary so this page appears clearer on search results."}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="h-10 px-4 rounded-xl text-slate-500 font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() =>
+              onSave({
+                metaTitle: metaTitle.trim(),
+                metaDescription: metaDescription.trim(),
+                canonicalUrl: canonicalUrl.trim(),
+              })
+            }
+            disabled={saving}
+            className="h-10 px-5 rounded-xl bg-sky-600 text-white font-bold disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save SEO"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ScheduleModal = ({
+  isOpen,
+  page,
+  onClose,
+  onSave,
+  saving,
+}: {
+  isOpen: boolean;
+  page: Page | null;
+  onClose: () => void;
+  onSave: (payload: {
+    publishAt: string | null;
+    unpublishAt: string | null;
+  }) => void;
+  saving: boolean;
+}) => {
+  const [publishAt, setPublishAt] = useState("");
+  const [unpublishAt, setUnpublishAt] = useState("");
+
+  useEffect(() => {
+    if (!isOpen || !page) return;
+    setPublishAt(
+      page.scheduledPublishAt
+        ? new Date(page.scheduledPublishAt).toISOString().slice(0, 16)
+        : "",
+    );
+    setUnpublishAt(
+      page.scheduledUnpublishAt
+        ? new Date(page.scheduledUnpublishAt).toISOString().slice(0, 16)
+        : "",
+    );
+  }, [isOpen, page]);
+
+  if (!isOpen || !page) return null;
+
+  return (
+    <div className="fixed inset-0 z-[180] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">
+              Publish Scheduling
+            </h3>
+            <p className="text-sm text-slate-500">
+              Set future publish or unpublish times
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-slate-50 text-slate-400"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-black uppercase tracking-wide text-slate-400">
+              Schedule Publish At
+            </label>
+            <input
+              type="datetime-local"
+              value={publishAt}
+              onChange={(e) => setPublishAt(e.target.value)}
+              className="mt-1 w-full h-11 px-4 rounded-xl border border-slate-200"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-black uppercase tracking-wide text-slate-400">
+              Schedule Unpublish At
+            </label>
+            <input
+              type="datetime-local"
+              value={unpublishAt}
+              onChange={(e) => setUnpublishAt(e.target.value)}
+              className="mt-1 w-full h-11 px-4 rounded-xl border border-slate-200"
+            />
+          </div>
+        </div>
+
+        <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="h-10 px-4 rounded-xl text-slate-500 font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() =>
+              onSave({
+                publishAt: publishAt ? new Date(publishAt).toISOString() : null,
+                unpublishAt: unpublishAt
+                  ? new Date(unpublishAt).toISOString()
+                  : null,
+              })
+            }
+            disabled={saving}
+            className="h-10 px-5 rounded-xl bg-sky-600 text-white font-bold disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Schedule"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { user, isLoading, logout } = useAuth();
@@ -918,6 +1169,17 @@ export default function DashboardPage() {
   const [loadingUsage, setLoadingUsage] = useState(false);
   const [runningBenchmark, setRunningBenchmark] = useState(false);
   const [publishingPageId, setPublishingPageId] = useState<string | null>(null);
+  const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [seoPageTarget, setSeoPageTarget] = useState<Page | null>(null);
+  const [schedulePageTarget, setSchedulePageTarget] = useState<Page | null>(
+    null,
+  );
+  const [savingSeo, setSavingSeo] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [savingTemplatePageId, setSavingTemplatePageId] = useState<
+    string | null
+  >(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const [prefillName, setPrefillName] = useState("");
@@ -1131,6 +1393,154 @@ export default function DashboardPage() {
       toast.error("Failed to delete page.");
     } finally {
       setBusyPageId(null);
+    }
+  };
+
+  const togglePageSelection = (pageId: string) => {
+    setSelectedPageIds((prev) =>
+      prev.includes(pageId)
+        ? prev.filter((id) => id !== pageId)
+        : [...prev, pageId],
+    );
+  };
+
+  const selectAllFilteredPages = () => {
+    const allIds = filteredPages.map((page) => page._id);
+    setSelectedPageIds((prev) => {
+      const hasAllSelected = allIds.every((id) => prev.includes(id));
+      if (hasAllSelected) {
+        return prev.filter((id) => !allIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...allIds]));
+    });
+  };
+
+  const refreshPages = async () => {
+    const data = await pagesApi.getAllPages();
+    setPages(data);
+  };
+
+  const handleBulkAction = async (
+    action: "publish" | "unpublish" | "duplicate" | "delete",
+  ) => {
+    if (!selectedPageIds.length) {
+      toast.error("Select at least one page first.");
+      return;
+    }
+
+    if (action === "delete") {
+      const confirmed = window.confirm(
+        `Delete ${selectedPageIds.length} selected page(s)? This cannot be undone.`,
+      );
+      if (!confirmed) return;
+    }
+
+    setBulkBusy(true);
+    try {
+      await pagesApi.batchPageOperation({
+        action,
+        pageIds: selectedPageIds,
+      });
+
+      await refreshPages();
+      setSelectedPageIds([]);
+      toast.success(`Bulk ${action} completed.`);
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.error?.message ||
+          error?.message ||
+          `Bulk ${action} failed.`,
+      );
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleSaveSeo = async (payload: {
+    metaTitle: string;
+    metaDescription: string;
+    canonicalUrl: string;
+  }) => {
+    if (!seoPageTarget) return;
+
+    setSavingSeo(true);
+    try {
+      const updated = await pagesApi.updatePage(seoPageTarget._id, {
+        seo: {
+          metaTitle: payload.metaTitle,
+          metaDescription: payload.metaDescription,
+          canonicalUrl: payload.canonicalUrl,
+        },
+      });
+      setPages((prev) =>
+        prev.map((page) =>
+          page._id === updated._id ? { ...page, ...updated } : page,
+        ),
+      );
+      toast.success("SEO settings saved.");
+      setSeoPageTarget(null);
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.error?.message || "Failed to save SEO.",
+      );
+    } finally {
+      setSavingSeo(false);
+      setOpenActionsFor(null);
+    }
+  };
+
+  const handleSaveSchedule = async (payload: {
+    publishAt: string | null;
+    unpublishAt: string | null;
+  }) => {
+    if (!schedulePageTarget) return;
+
+    setSavingSchedule(true);
+    try {
+      const result = await pagesApi.schedulePage(
+        schedulePageTarget._id,
+        payload,
+      );
+      setPages((prev) =>
+        prev.map((page) =>
+          page._id === result.page._id ? { ...page, ...result.page } : page,
+        ),
+      );
+      toast.success(result.scheduleSummary || "Schedule updated.");
+      setSchedulePageTarget(null);
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.error?.message || "Failed to save schedule.",
+      );
+    } finally {
+      setSavingSchedule(false);
+      setOpenActionsFor(null);
+    }
+  };
+
+  const handleSaveAsTemplate = async (page: Page) => {
+    const templateName = window.prompt(
+      "Template name",
+      `${page.name} Template`,
+    );
+    if (!templateName?.trim()) return;
+
+    setSavingTemplatePageId(page._id);
+    try {
+      await pagesApi.savePageAsTemplate(page._id, {
+        name: templateName.trim(),
+        description: `Saved from page ${page.name}`,
+        category: "custom",
+        isPublic: false,
+      });
+      toast.success("Page saved as template.");
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.error?.message || "Failed to save template.",
+      );
+    } finally {
+      setSavingTemplatePageId(null);
+      setOpenActionsFor(null);
     }
   };
 
@@ -1541,15 +1951,66 @@ export default function DashboardPage() {
                     Edit, validate, reorder, and publish from one place.
                   </p>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search pages"
-                    className="h-10 pl-9 pr-4 w-56 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-sky-100"
-                  />
+                <div className="flex flex-wrap items-center gap-2 justify-end">
+                  <Link
+                    href="/dashboard/media"
+                    className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                  >
+                    <Files className="w-3.5 h-3.5" />
+                    Media Hub
+                  </Link>
+                  <button
+                    onClick={selectAllFilteredPages}
+                    className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                  >
+                    {filteredPages.length > 0 &&
+                    filteredPages.every((page) =>
+                      selectedPageIds.includes(page._id),
+                    ) ? (
+                      <CheckSquare className="w-3.5 h-3.5" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5" />
+                    )}
+                    Select
+                  </button>
+                  <button
+                    onClick={() => void handleBulkAction("publish")}
+                    disabled={bulkBusy || !selectedPageIds.length}
+                    className="h-10 px-3 rounded-xl bg-emerald-600 text-white text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    Bulk Publish
+                  </button>
+                  <button
+                    onClick={() => void handleBulkAction("unpublish")}
+                    disabled={bulkBusy || !selectedPageIds.length}
+                    className="h-10 px-3 rounded-xl bg-amber-600 text-white text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    Bulk Unpublish
+                  </button>
+                  <button
+                    onClick={() => void handleBulkAction("duplicate")}
+                    disabled={bulkBusy || !selectedPageIds.length}
+                    className="h-10 px-3 rounded-xl bg-sky-600 text-white text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    Bulk Duplicate
+                  </button>
+                  <button
+                    onClick={() => void handleBulkAction("delete")}
+                    disabled={bulkBusy || !selectedPageIds.length}
+                    className="h-10 px-3 rounded-xl bg-red-600 text-white text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    Bulk Delete
+                  </button>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search pages"
+                      className="h-10 pl-9 pr-4 w-56 rounded-xl border border-slate-200 bg-white text-sm focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1566,6 +2027,17 @@ export default function DashboardPage() {
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
+                          <button
+                            onClick={() => togglePageSelection(page._id)}
+                            className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-500 grid place-items-center"
+                            title="Select page"
+                          >
+                            {selectedPageIds.includes(page._id) ? (
+                              <CheckSquare className="w-4 h-4 text-sky-600" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
                           <div
                             className={`w-12 h-12 rounded-xl grid place-items-center ${page.useHtml ? "bg-sky-100 text-sky-700" : "bg-indigo-100 text-indigo-700"}`}
                           >
@@ -1728,6 +2200,30 @@ export default function DashboardPage() {
             Rename Page
           </button>
           <button
+            onClick={() => setSeoPageTarget(activePage)}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+          >
+            <Settings2 className="w-4 h-4 text-indigo-600" />
+            SEO Settings
+          </button>
+          <button
+            onClick={() => setSchedulePageTarget(activePage)}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+          >
+            <CalendarClock className="w-4 h-4 text-sky-600" />
+            Publish Schedule
+          </button>
+          <button
+            disabled={savingTemplatePageId === activePage._id}
+            onClick={() => void handleSaveAsTemplate(activePage)}
+            className="w-full flex items-center gap-2 h-10 px-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-60"
+          >
+            <Save className="w-4 h-4 text-emerald-600" />
+            {savingTemplatePageId === activePage._id
+              ? "Saving Template..."
+              : "Save As Template"}
+          </button>
+          <button
             disabled={publishingPageId === activePage._id}
             onClick={() =>
               activePage.isPublished
@@ -1770,6 +2266,22 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
+
+      <SeoSettingsModal
+        isOpen={!!seoPageTarget}
+        page={seoPageTarget}
+        onClose={() => setSeoPageTarget(null)}
+        onSave={handleSaveSeo}
+        saving={savingSeo}
+      />
+
+      <ScheduleModal
+        isOpen={!!schedulePageTarget}
+        page={schedulePageTarget}
+        onClose={() => setSchedulePageTarget(null)}
+        onSave={handleSaveSchedule}
+        saving={savingSchedule}
+      />
 
       <FullSiteBuilderModal
         isOpen={showSiteBuilder}

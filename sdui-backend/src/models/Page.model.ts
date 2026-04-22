@@ -6,9 +6,17 @@ export interface IPage extends Document {
   name: string;
   slug: string;
   jsonConfig: PageJSON;
+  seo: {
+    metaTitle?: string;
+    metaDescription?: string;
+    canonicalUrl?: string;
+  };
   htmlContent?: string;
   useHtml: boolean;
   isPublished: boolean;
+  scheduledPublishAt?: Date | null;
+  scheduledUnpublishAt?: Date | null;
+  lastPublishedAt?: Date | null;
   version: string;
   orderIndex: number;
   createdAt: Date;
@@ -47,6 +55,23 @@ const PageSchema = new Schema<IPage>(
         },
       },
     },
+    seo: {
+      metaTitle: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      metaDescription: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      canonicalUrl: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+    },
     htmlContent: {
       type: String,
     },
@@ -57,6 +82,18 @@ const PageSchema = new Schema<IPage>(
     isPublished: {
       type: Boolean,
       default: false,
+    },
+    scheduledPublishAt: {
+      type: Date,
+      default: null,
+    },
+    scheduledUnpublishAt: {
+      type: Date,
+      default: null,
+    },
+    lastPublishedAt: {
+      type: Date,
+      default: null,
     },
     version: {
       type: String,
@@ -81,5 +118,7 @@ const PageSchema = new Schema<IPage>(
 // Compound index for unique slug per institution
 PageSchema.index({ institutionId: 1, slug: 1 }, { unique: true });
 PageSchema.index({ isPublished: 1 });
+PageSchema.index({ institutionId: 1, scheduledPublishAt: 1 });
+PageSchema.index({ institutionId: 1, scheduledUnpublishAt: 1 });
 
 export const Page = mongoose.model<IPage>("Page", PageSchema);

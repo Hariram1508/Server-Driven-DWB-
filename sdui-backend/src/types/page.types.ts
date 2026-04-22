@@ -12,6 +12,12 @@ export interface PageMeta {
   ogImage?: string;
 }
 
+export interface PageSEOSettings {
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+}
+
 export interface PageJSON {
   components: ComponentNode[];
   meta?: PageMeta;
