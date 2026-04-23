@@ -3,6 +3,7 @@ import { body, param, query } from "express-validator";
 import pageController from "../controllers/page.controller";
 import authController from "../controllers/auth.controller";
 import formController from "../controllers/form.controller";
+import settingsController from "../controllers/settings.controller";
 import { validate } from "../middleware/validate.middleware";
 
 const router = Router();
@@ -16,6 +17,17 @@ router.get("/health", (_req, res) => {
 
 // Get all institutions
 router.get("/institutions", authController.getInstitutions);
+
+router.get(
+  "/settings",
+  validate([
+    query("institutionId")
+      .optional()
+      .isMongoId()
+      .withMessage("Invalid institution ID"),
+  ]),
+  settingsController.getPublicSettings,
+);
 
 // Get all published pages
 router.get(

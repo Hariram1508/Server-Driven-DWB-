@@ -7,6 +7,8 @@ import { useNode } from "@craftjs/core";
 interface ImageProps {
   src?: string;
   alt?: string;
+  placeholderSrc?: string;
+  placeholderColor?: string;
   width?: string;
   height?: string;
   objectFit?: "cover" | "contain" | "fill";
@@ -24,6 +26,8 @@ interface ImageProps {
 export const Image = ({
   src = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80",
   alt = "Institution image",
+  placeholderSrc = "",
+  placeholderColor = "#E2E8F0",
   width = "100%",
   height = "320px",
   objectFit = "cover",
@@ -37,6 +41,7 @@ export const Image = ({
   y = "0px",
   zIndex = "1",
 }: ImageProps) => {
+  const [isLoaded, setIsLoaded] = React.useState(false);
   const {
     id,
     connectors: { connect, drag },
@@ -53,6 +58,8 @@ export const Image = ({
           object-fit: ${objectFit};
           border-radius: ${borderRadius};
           display: block;
+          opacity: ${isLoaded ? 1 : 0};
+          transition: opacity 220ms ease;
         }
         .${imageClass}-wrapper {
           margin: ${margin};
@@ -63,6 +70,17 @@ export const Image = ({
           top: ${positionMode === "absolute" ? y : "auto"};
           z-index: ${parseInt(zIndex, 10) || 1};
         }
+        .${imageClass}-placeholder {
+          position: absolute;
+          inset: 0;
+          border-radius: ${borderRadius};
+          background-color: ${placeholderColor};
+          background-image: ${placeholderSrc ? `url('${placeholderSrc}')` : "none"};
+          background-size: cover;
+          background-position: center;
+          filter: blur(8px);
+          transform: scale(1.02);
+        }
       `}</style>
       <figure
         ref={(ref: HTMLElement | null) => {
@@ -72,7 +90,16 @@ export const Image = ({
         }}
         className={`w-full ${imageClass}-wrapper`}
       >
-        <img src={src} alt={alt} className={imageClass} loading="lazy" />
+        {!isLoaded && (
+          <div aria-hidden="true" className={`${imageClass}-placeholder`} />
+        )}
+        <img
+          src={src}
+          alt={alt}
+          className={imageClass}
+          loading="lazy"
+          onLoad={() => setIsLoaded(true)}
+        />
         {caption ? (
           <figcaption className="mt-2 text-sm text-gray-500 text-center">
             {caption}
@@ -101,6 +128,34 @@ export const ImageSettings = () => {
           className="w-full px-3 py-2 border rounded text-sm"
           title="Image source URL"
           placeholder="https://..."
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Placeholder URL (LQIP)
+        </label>
+        <input
+          value={props.placeholderSrc ?? ""}
+          onChange={(e) =>
+            setProp((p: any) => (p.placeholderSrc = e.target.value))
+          }
+          className="w-full px-3 py-2 border rounded text-sm"
+          title="Low quality placeholder image"
+          placeholder="https://..."
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          Placeholder Color
+        </label>
+        <input
+          type="color"
+          value={props.placeholderColor ?? "#E2E8F0"}
+          onChange={(e) =>
+            setProp((p: any) => (p.placeholderColor = e.target.value))
+          }
+          className="w-full h-10 border rounded cursor-pointer"
+          title="Fallback placeholder color"
         />
       </div>
       <div>

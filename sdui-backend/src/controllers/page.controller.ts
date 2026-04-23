@@ -215,6 +215,7 @@ export class PageController {
   getPublishedPages = asyncHandler(async (req: Request, res: Response) => {
     const institutionId = req.query.institutionId as string | undefined;
     const pages = await pageService.getPublishedPages(institutionId);
+    res.setHeader("Cache-Control", "public, max-age=86400");
     return sendSuccess(res, pages);
   });
 
@@ -246,6 +247,8 @@ export class PageController {
     }
 
     const page = await pageService.getPublishedPageBySlug(slug, institutionId);
+
+    res.setHeader("Cache-Control", "public, max-age=86400");
 
     return sendSuccess(res, page);
   });

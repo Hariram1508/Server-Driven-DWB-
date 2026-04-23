@@ -1953,6 +1953,20 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 justify-end">
                   <Link
+                    href="/dashboard/settings"
+                    className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                    Settings
+                  </Link>
+                  <Link
+                    href="/dashboard/performance"
+                    className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    Performance
+                  </Link>
+                  <Link
                     href="/dashboard/media"
                     className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-black uppercase tracking-widest inline-flex items-center gap-1.5"
                   >

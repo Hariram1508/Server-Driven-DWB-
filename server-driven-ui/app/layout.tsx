@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/context/AuthContext";
 import { Toaster } from "sonner";
 import { React19WarningFilter } from "@/components/React19WarningFilter";
+import { GoogleAnalyticsLoader } from "@/components/GoogleAnalyticsLoader";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,6 +27,7 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
           <React19WarningFilter />
+          <GoogleAnalyticsLoader />
           {children}
           <Toaster position="top-right" />
         </AuthProvider>

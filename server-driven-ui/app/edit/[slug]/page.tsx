@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef, use, useCallback } from "react";
 import { Editor, Frame, Element, useEditor } from "@craftjs/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Sparkles,
   Monitor,
@@ -29,12 +30,23 @@ import * as pagesApi from "@/lib/api/pages.api";
 import { useAuth } from "@/lib/context/AuthContext";
 import { toast } from "sonner";
 import { Container } from "@/components/builder-components/Container";
-import { AIChat } from "@/components/AIChat";
 import { RenderNode } from "@/components/editor/RenderNode";
 import { SafeHTMLRenderer } from "@/components/editor/SafeHTMLRenderer";
 import { generatePageHTML, modifyPageHTML } from "@/lib/api/ai.api";
 import Button from "@/components/ui/Button";
 import { Page, PageJSON } from "@/lib/types/page.types";
+
+const AIChat = dynamic(
+  () => import("@/components/AIChat").then((mod) => mod.AIChat),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full min-h-75 rounded-2xl border border-slate-200 bg-white flex items-center justify-center text-sm text-slate-500 font-medium">
+        Loading AI assistant...
+      </div>
+    ),
+  },
+);
 
 interface PageProps {
   params: Promise<{ slug: string }>;

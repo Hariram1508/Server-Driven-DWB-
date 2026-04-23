@@ -1,70 +1,78 @@
-import express, { Application } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import morgan from 'morgan';
-import env from './config/env';
-import { connectDatabase } from './config/database';
-import { connectRedis } from './config/redis';
-import { configureCloudinary } from './config/cloudinary';
-import { errorHandler } from './middleware/error.middleware';
-import { apiLimiter } from './middleware/rateLimit.middleware';
+import express, { Application } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import morgan from "morgan";
+import env from "./config/env";
+import { connectDatabase } from "./config/database";
+import { connectRedis } from "./config/redis";
+import { configureCloudinary } from "./config/cloudinary";
+import { errorHandler } from "./middleware/error.middleware";
+import { apiLimiter } from "./middleware/rateLimit.middleware";
+import { metricsMiddleware } from "./middleware/metrics.middleware";
 
 // Import routes
-import authRoutes from './routes/auth.routes';
-import pageRoutes from './routes/page.routes';
-import aiRoutes from './routes/ai.routes';
-import mediaRoutes from './routes/media.routes';
-import templateRoutes from './routes/template.routes';
-import versionRoutes from './routes/version.routes';
-import publicRoutes from './routes/public.routes';
+import authRoutes from "./routes/auth.routes";
+import pageRoutes from "./routes/page.routes";
+import aiRoutes from "./routes/ai.routes";
+import mediaRoutes from "./routes/media.routes";
+import templateRoutes from "./routes/template.routes";
+import versionRoutes from "./routes/version.routes";
+import publicRoutes from "./routes/public.routes";
+import settingsRoutes from "./routes/settings.routes";
+import systemRoutes from "./routes/system.routes";
 
-import logger from './utils/logger.util';
+import logger from "./utils/logger.util";
 
 const app: Application = express();
 
 // Middleware
 app.use(helmet()); // Security headers
 app.use(compression()); // Compress responses
-app.use(cors({
-  origin: env.allowedOrigins,
-  credentials: true,
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(
+  cors({
+    origin: env.allowedOrigins,
+    credentials: true,
+  }),
+);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(metricsMiddleware);
 
 // Logging
-if (env.nodeEnv === 'development') {
-  app.use(morgan('dev'));
+if (env.nodeEnv === "development") {
+  app.use(morgan("dev"));
 } else {
-  app.use(morgan('combined'));
+  app.use(morgan("combined"));
 }
 
 // Health check
-app.get('/health', (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     timestamp: new Date().toISOString(),
     environment: env.nodeEnv,
   });
 });
 
 // API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/pages', apiLimiter, pageRoutes);
-app.use('/api/ai', aiRoutes); // AI routes have their own rate limiter
-app.use('/api/media', apiLimiter, mediaRoutes);
-app.use('/api/templates', apiLimiter, templateRoutes);
-app.use('/api/versions', apiLimiter, versionRoutes);
-app.use('/api/public', publicRoutes); // No auth required
+app.use("/api/auth", authRoutes);
+app.use("/api/pages", apiLimiter, pageRoutes);
+app.use("/api/ai", aiRoutes); // AI routes have their own rate limiter
+app.use("/api/media", apiLimiter, mediaRoutes);
+app.use("/api/templates", apiLimiter, templateRoutes);
+app.use("/api/versions", apiLimiter, versionRoutes);
+app.use("/api/settings", apiLimiter, settingsRoutes);
+app.use("/api/system", apiLimiter, systemRoutes);
+app.use("/api/public", publicRoutes); // No auth required
 
 // 404 handler
-app.use('*', (_req, res) => {
+app.use("*", (_req, res) => {
   res.status(404).json({
     success: false,
     error: {
-      message: 'Route not found',
-      code: 'NOT_FOUND',
+      message: "Route not found",
+      code: "NOT_FOUND",
     },
   });
 });
@@ -82,14 +90,16 @@ const startServer = async (): Promise<void> => {
     if (process.env.REDIS_URL) {
       await connectRedis();
     } else {
-      console.warn('⚠️ Redis URL not configured. Skipping Redis connection.');
+      console.warn("⚠️ Redis URL not configured. Skipping Redis connection.");
     }
 
     // Configure Cloudinary (Optional for MVP)
     if (env.cloudinary.cloudName && env.cloudinary.apiKey) {
       configureCloudinary();
     } else {
-      console.warn('⚠️ Cloudinary not configured. Skipping Cloudinary configuration.');
+      console.warn(
+        "⚠️ Cloudinary not configured. Skipping Cloudinary configuration.",
+      );
     }
 
     // Start Express server
@@ -110,19 +120,19 @@ const startServer = async (): Promise<void> => {
       logger.info(`Server started on port ${env.port}`);
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error("Failed to start server:", error);
     process.exit(1);
   }
 };
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM signal received: closing HTTP server");
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT signal received: closing HTTP server');
+process.on("SIGINT", () => {
+  logger.info("SIGINT signal received: closing HTTP server");
   process.exit(0);
 });
 
