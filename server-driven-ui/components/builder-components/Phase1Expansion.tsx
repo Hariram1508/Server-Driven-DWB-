@@ -1307,28 +1307,670 @@ export const Testimonial = createSimpleComponent("Testimonial", {
   backgroundColor: "#eff6ff",
 });
 
-export const Timeline = createSimpleComponent(
-  "Timeline",
-  {
+export const Timeline = ({
+  title = "Journey Timeline",
+  subtitle = "Milestones",
+  items = "Application Opens\nEntrance Assessment\nCounseling Session\nOrientation Day",
+  backgroundColor = "#ecfeff",
+  textColor = "#0f172a",
+  titleColor = "#0f172a",
+  subtitleColor = "#0e7490",
+  bodyTextColor = "#334155",
+  titleSize = "28px",
+  subtitleSize = "12px",
+  bodySize = "15px",
+  fontFamily = "inherit",
+  textStyle = "normal",
+  borderRadius = "18px",
+  borderColor = "#a5f3fc",
+  padding = "24px",
+  gap = "14px",
+  boxShadow = "0 22px 45px rgba(2,132,199,0.16)",
+  showCta = false,
+  ctaText = "Explore",
+  ctaUrl = "#",
+  ctaTarget = "same",
+  buttonColor = "#0f766e",
+  buttonTextColor = "#ffffff",
+  buttonHoverColor = "#115e59",
+}: BaseProps) => {
+  const {
+    connectors: { connect, drag },
+  } = useNode();
+  const [buttonHover, setButtonHover] = React.useState(false);
+  const timelineBackground =
+    "linear-gradient(140deg, #f8fafc 0%, #ecfeff 42%, #e0f2fe 100%)";
+  const timelineBorderColor = "rgba(56, 189, 248, 0.28)";
+  const timelineBorderRadius = "30px";
+  const timelineBoxShadow = "0 30px 70px rgba(14, 116, 144, 0.18)";
+  const timelineTextColor = "#082f49";
+  const timelineTitleColor = "#0c4a6e";
+  const timelineSubtitleColor = "#0e7490";
+  const timelineBodyTextColor = "#164e63";
+  const timelineItems = splitItems(items);
+
+  const handleActionClick = () => {
+    if (!ctaUrl || ctaUrl === "#") return;
+    if (ctaTarget === "new") {
+      window.open(ctaUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    window.location.href = ctaUrl;
+  };
+
+  return (
+    <section
+      ref={(ref: HTMLElement | null) => {
+        if (ref) connect(drag(ref));
+      }}
+      style={{
+        background: timelineBackground,
+        border: `1px solid ${timelineBorderColor}`,
+        borderRadius: timelineBorderRadius,
+        boxShadow: timelineBoxShadow,
+        padding,
+        fontFamily,
+        fontStyle: textStyle,
+        color: timelineTextColor,
+        display: "flex",
+        flexDirection: "column",
+        gap,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          width: "320px",
+          height: "320px",
+          right: "-150px",
+          top: "-140px",
+          borderRadius: "999px",
+          background:
+            "radial-gradient(circle, rgba(56,189,248,0.52) 0%, rgba(56,189,248,0) 72%)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: "220px",
+          height: "220px",
+          left: "-90px",
+          bottom: "-90px",
+          borderRadius: "999px",
+          background:
+            "radial-gradient(circle, rgba(125,211,252,0.35) 0%, rgba(125,211,252,0) 70%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <p
+        style={{
+          margin: 0,
+          alignSelf: "flex-start",
+          fontSize: subtitleSize,
+          color: timelineSubtitleColor,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          fontWeight: 800,
+          background: "rgba(255,255,255,0.82)",
+          border: "1px solid rgba(14,116,144,0.26)",
+          borderRadius: "999px",
+          padding: "7px 14px",
+          boxShadow: "0 8px 20px rgba(14, 116, 144, 0.12)",
+        }}
+      >
+        {subtitle}
+      </p>
+
+      <h3
+        style={{
+          margin: 0,
+          fontSize: titleSize,
+          color: timelineTitleColor,
+          lineHeight: 1.2,
+          maxWidth: "24ch",
+          fontWeight: 800,
+          textWrap: "balance",
+        }}
+      >
+        {title}
+      </h3>
+
+      <ol
+        style={{
+          margin: 0,
+          padding: 0,
+          listStyle: "none",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px",
+        }}
+      >
+        {timelineItems.map((item, idx) => {
+          const isLast = idx === timelineItems.length - 1;
+          return (
+            <li
+              key={`timeline-item-${idx}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "46px 1fr",
+                gap: "14px",
+                alignItems: "start",
+                position: "relative",
+              }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <span
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    borderRadius: "999px",
+                    background:
+                      "linear-gradient(135deg, #0891b2 0%, #0ea5e9 55%, #38bdf8 100%)",
+                    color: "#ffffff",
+                    fontWeight: 800,
+                    fontSize: "13px",
+                    display: "grid",
+                    placeItems: "center",
+                    boxShadow: "0 12px 22px rgba(14,116,144,0.34)",
+                    zIndex: 2,
+                  }}
+                >
+                  {idx + 1}
+                </span>
+                {!isLast ? (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "37px",
+                      width: "3px",
+                      height: "calc(100% + 16px)",
+                      background:
+                        "linear-gradient(to bottom, rgba(14,116,144,0.46), rgba(14,116,144,0.08))",
+                      borderRadius: "999px",
+                    }}
+                  />
+                ) : null}
+              </div>
+
+              <div
+                style={{
+                  borderRadius: "16px",
+                  border: "1px solid rgba(125,211,252,0.45)",
+                  background:
+                    "linear-gradient(150deg, rgba(255,255,255,0.94), rgba(240,249,255,0.78))",
+                  padding: "14px 16px",
+                  color: timelineBodyTextColor,
+                  fontSize: bodySize,
+                  lineHeight: 1.6,
+                  boxShadow: "0 14px 24px rgba(15,23,42,0.08)",
+                }}
+              >
+                {item}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {showCta ? (
+        <div style={{ marginTop: "6px" }}>
+          <button
+            type="button"
+            onMouseEnter={() => setButtonHover(true)}
+            onMouseLeave={() => setButtonHover(false)}
+            onClick={handleActionClick}
+            style={{
+              backgroundColor: buttonHover ? buttonHoverColor : buttonColor,
+              color: buttonTextColor,
+              border: "none",
+              borderRadius: "10px",
+              padding: "10px 16px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 10px 20px rgba(15,23,42,0.2)",
+            }}
+          >
+            {ctaText || "Explore"}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+(Timeline as any).craft = {
+  displayName: "Timeline",
+  props: {
+    title: "Journey Timeline",
     subtitle: "Milestones",
-    items: "Application Opens\nExam Date\nCounseling",
-    backgroundColor: "#f0fdf4",
+    items:
+      "Application Opens\nEntrance Assessment\nCounseling Session\nOrientation Day",
+    backgroundColor: "#ecfeff",
+    textColor: "#0f172a",
+    titleColor: "#0c4a6e",
+    subtitleColor: "#0e7490",
+    bodyTextColor: "#164e63",
+    titleSize: "28px",
+    subtitleSize: "12px",
+    bodySize: "15px",
+    fontFamily: "inherit",
+    textStyle: "normal",
+    borderRadius: "30px",
+    borderColor: "rgba(56, 189, 248, 0.28)",
+    padding: "24px",
+    gap: "14px",
+    boxShadow: "0 30px 70px rgba(14, 116, 144, 0.18)",
+    showCta: false,
+    ctaText: "Explore",
+    ctaUrl: "#",
+    ctaTarget: "same",
+    buttonColor: "#0f766e",
+    buttonTextColor: "#ffffff",
+    buttonHoverColor: "#115e59",
   },
-  true,
-);
+  related: {
+    toolbar: () => <BaseSettings showItems={true} />,
+  },
+};
 
-export const Badge = createSimpleComponent("Badge", {
-  subtitle: "Achievement",
-  description: "Top Ranked 2026",
-  backgroundColor: "#fef3c7",
-  borderRadius: "999px",
-});
+export const Badge = ({
+  title = "Top Ranked",
+  subtitle = "Achievement",
+  description = "#1 in Academic Excellence 2026",
+  backgroundColor = "#fef3c7",
+  textColor = "#111827",
+  titleColor = "#7c2d12",
+  subtitleColor = "#9a3412",
+  bodyTextColor = "#92400e",
+  titleSize = "20px",
+  subtitleSize = "11px",
+  bodySize = "13px",
+  fontFamily = "inherit",
+  textStyle = "normal",
+  borderRadius = "999px",
+  borderColor = "rgba(251,146,60,0.45)",
+  padding = "16px",
+  boxShadow = "0 20px 40px rgba(217,119,6,0.2)",
+  showCta = false,
+  ctaText = "View",
+  ctaUrl = "#",
+  ctaTarget = "same",
+  buttonColor = "#9a3412",
+  buttonTextColor = "#ffffff",
+  buttonHoverColor = "#7c2d12",
+}: BaseProps) => {
+  const {
+    connectors: { connect, drag },
+  } = useNode();
+  const [buttonHover, setButtonHover] = React.useState(false);
 
-export const Quote = createSimpleComponent("Quote", {
-  subtitle: "Inspiration",
-  description: "Learning never exhausts the mind.",
-  backgroundColor: "#f5f3ff",
-});
+  const handleActionClick = () => {
+    if (!ctaUrl || ctaUrl === "#") return;
+    if (ctaTarget === "new") {
+      window.open(ctaUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    window.location.href = ctaUrl;
+  };
+
+  return (
+    <section
+      ref={(ref: HTMLElement | null) => {
+        if (ref) connect(drag(ref));
+      }}
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        background:
+          "linear-gradient(145deg, #fffdf2 0%, #fef3c7 45%, #fde68a 100%)",
+        border: `1px solid ${borderColor}`,
+        borderRadius,
+        boxShadow,
+        padding,
+        color: textColor,
+        fontFamily,
+        display: "inline-flex",
+        flexDirection: "column",
+        gap: "6px",
+        minWidth: "280px",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          right: "-18px",
+          top: "-18px",
+          width: "82px",
+          height: "82px",
+          borderRadius: "999px",
+          background:
+            "radial-gradient(circle, rgba(251,146,60,0.35) 0%, rgba(251,146,60,0) 70%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <p
+        style={{
+          margin: 0,
+          fontSize: subtitleSize,
+          color: subtitleColor,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          fontWeight: 800,
+        }}
+      >
+        {subtitle}
+      </p>
+
+      <h4
+        style={{
+          margin: 0,
+          fontSize: titleSize,
+          fontWeight: 900,
+          color: titleColor,
+          fontStyle: textStyle,
+          lineHeight: 1.2,
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+        }}
+      >
+        <span
+          style={{
+            width: "28px",
+            height: "28px",
+            borderRadius: "999px",
+            background: "linear-gradient(135deg, #f97316 0%, #f59e0b 100%)",
+            boxShadow: "0 8px 14px rgba(217,119,6,0.28)",
+            color: "#fff7ed",
+            fontSize: "14px",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          ★
+        </span>
+        {title}
+      </h4>
+
+      <p
+        style={{
+          margin: 0,
+          fontSize: bodySize,
+          lineHeight: 1.55,
+          color: bodyTextColor,
+          fontWeight: 600,
+          maxWidth: "34ch",
+        }}
+      >
+        {description}
+      </p>
+
+      {showCta ? (
+        <div style={{ marginTop: "4px" }}>
+          <button
+            type="button"
+            onMouseEnter={() => setButtonHover(true)}
+            onMouseLeave={() => setButtonHover(false)}
+            onClick={handleActionClick}
+            style={{
+              backgroundColor: buttonHover ? buttonHoverColor : buttonColor,
+              color: buttonTextColor,
+              border: "none",
+              borderRadius: "10px",
+              padding: "9px 14px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 10px 20px rgba(154,52,18,0.24)",
+            }}
+          >
+            {ctaText || "View"}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+(Badge as any).craft = {
+  displayName: "Badge",
+  props: {
+    title: "Top Ranked",
+    subtitle: "Achievement",
+    description: "#1 in Academic Excellence 2026",
+    backgroundColor: "#fef3c7",
+    textColor: "#111827",
+    titleColor: "#7c2d12",
+    subtitleColor: "#9a3412",
+    bodyTextColor: "#92400e",
+    titleSize: "20px",
+    subtitleSize: "11px",
+    bodySize: "13px",
+    fontFamily: "inherit",
+    textStyle: "normal",
+    borderRadius: "999px",
+    borderColor: "rgba(251,146,60,0.45)",
+    padding: "16px",
+    boxShadow: "0 20px 40px rgba(217,119,6,0.2)",
+    showCta: false,
+    ctaText: "View",
+    ctaUrl: "#",
+    ctaTarget: "same",
+    buttonColor: "#9a3412",
+    buttonTextColor: "#ffffff",
+    buttonHoverColor: "#7c2d12",
+  },
+  related: {
+    toolbar: () => <BaseSettings showItems={false} />,
+  },
+};
+
+export const Quote = ({
+  title = "Leonardo da Vinci",
+  subtitle = "Inspiration",
+  description = "Learning never exhausts the mind.",
+  backgroundColor = "#f5f3ff",
+  textColor = "#1e1b4b",
+  titleColor = "#312e81",
+  subtitleColor = "#6d28d9",
+  bodyTextColor = "#4338ca",
+  titleSize = "18px",
+  subtitleSize = "12px",
+  bodySize = "20px",
+  fontFamily = "inherit",
+  textStyle = "italic",
+  borderRadius = "20px",
+  borderColor = "#ddd6fe",
+  padding = "24px",
+  boxShadow = "0 24px 50px rgba(91,33,182,0.16)",
+  showCta = false,
+  ctaText = "Read More",
+  ctaUrl = "#",
+  ctaTarget = "same",
+  buttonColor = "#6d28d9",
+  buttonTextColor = "#ffffff",
+  buttonHoverColor = "#5b21b6",
+}: BaseProps) => {
+  const {
+    connectors: { connect, drag },
+  } = useNode();
+  const [buttonHover, setButtonHover] = React.useState(false);
+  const quoteBackground =
+    "linear-gradient(155deg, #ffffff 0%, #f5f3ff 55%, #ede9fe 100%)";
+  const quoteBorderColor = "rgba(167, 139, 250, 0.28)";
+  const quoteBorderRadius = "28px";
+  const quoteBoxShadow = "0 28px 60px rgba(91,33,182,0.16)";
+  const quoteTextColor = "#1e1b4b";
+  const quoteTitleColor = "#312e81";
+  const quoteSubtitleColor = "#6d28d9";
+  const quoteBodyTextColor = "#4338ca";
+
+  const handleActionClick = () => {
+    if (!ctaUrl || ctaUrl === "#") return;
+    if (ctaTarget === "new") {
+      window.open(ctaUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    window.location.href = ctaUrl;
+  };
+
+  return (
+    <section
+      ref={(ref: HTMLElement | null) => {
+        if (ref) connect(drag(ref));
+      }}
+      style={{
+        background: quoteBackground,
+        border: `1px solid ${quoteBorderColor}`,
+        borderRadius: quoteBorderRadius,
+        boxShadow: quoteBoxShadow,
+        padding,
+        color: quoteTextColor,
+        fontFamily,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: "-30px",
+          right: "16px",
+          fontSize: "140px",
+          lineHeight: 1,
+          color: "rgba(109,40,217,0.12)",
+          fontFamily: "Georgia, serif",
+          pointerEvents: "none",
+          userSelect: "none",
+        }}
+      >
+        “
+      </span>
+
+      <p
+        style={{
+          margin: 0,
+          marginBottom: "10px",
+          fontSize: subtitleSize,
+          fontWeight: 800,
+          color: quoteSubtitleColor,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+        }}
+      >
+        {subtitle}
+      </p>
+
+      <blockquote
+        style={{
+          margin: 0,
+          padding: "6px 0 0 0",
+          fontSize: bodySize,
+          lineHeight: 1.7,
+          fontStyle: textStyle,
+          color: quoteBodyTextColor,
+          fontWeight: 600,
+          maxWidth: "58ch",
+        }}
+      >
+        {description}
+      </blockquote>
+
+      <div
+        style={{
+          marginTop: "16px",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "8px 14px",
+          borderRadius: "999px",
+          border: "1px solid rgba(109,40,217,0.24)",
+          background: "rgba(255,255,255,0.72)",
+          color: quoteTitleColor,
+          fontWeight: 700,
+          fontSize: titleSize,
+        }}
+      >
+        <span
+          style={{
+            width: "10px",
+            height: "10px",
+            borderRadius: "999px",
+            background: "linear-gradient(135deg, #7c3aed, #a78bfa)",
+            boxShadow: "0 0 0 4px rgba(167,139,250,0.22)",
+          }}
+        />
+        {title}
+      </div>
+
+      {showCta ? (
+        <div style={{ marginTop: "16px" }}>
+          <button
+            type="button"
+            onMouseEnter={() => setButtonHover(true)}
+            onMouseLeave={() => setButtonHover(false)}
+            onClick={handleActionClick}
+            style={{
+              backgroundColor: buttonHover ? buttonHoverColor : buttonColor,
+              color: buttonTextColor,
+              border: "none",
+              borderRadius: "10px",
+              padding: "10px 16px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 10px 22px rgba(91,33,182,0.24)",
+            }}
+          >
+            {ctaText || "Read More"}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+(Quote as any).craft = {
+  displayName: "Quote",
+  props: {
+    title: "Leonardo da Vinci",
+    subtitle: "Inspiration",
+    description: "Learning never exhausts the mind.",
+    backgroundColor: "#f5f3ff",
+    textColor: "#1e1b4b",
+    titleColor: "#312e81",
+    subtitleColor: "#6d28d9",
+    bodyTextColor: "#4338ca",
+    titleSize: "18px",
+    subtitleSize: "12px",
+    bodySize: "20px",
+    fontFamily: "inherit",
+    textStyle: "italic",
+    borderRadius: "20px",
+    borderColor: "#ddd6fe",
+    padding: "24px",
+    boxShadow: "0 24px 50px rgba(91,33,182,0.16)",
+    showCta: false,
+    ctaText: "Read More",
+    ctaUrl: "#",
+    ctaTarget: "same",
+    buttonColor: "#6d28d9",
+    buttonTextColor: "#ffffff",
+    buttonHoverColor: "#5b21b6",
+  },
+  related: {
+    toolbar: () => <BaseSettings showItems={false} />,
+  },
+};
 
 type NavbarProps = {
   logoText?: string;

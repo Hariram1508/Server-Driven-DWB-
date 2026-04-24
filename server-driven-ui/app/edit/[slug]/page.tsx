@@ -169,12 +169,98 @@ const sanitizeJsonConfig = (config: unknown): Record<string, unknown> => {
         resolvedName = type;
       }
 
+      const displayName =
+        typeof node.displayName === "string" ? node.displayName : undefined;
+      const normalizeName = (value?: string) => (value || "").toLowerCase();
+      const normalizedResolvedName = normalizeName(resolvedName);
+      const normalizedDisplayName = normalizeName(displayName);
+
+      const looksLikeTimeline =
+        normalizedResolvedName === "timeline" ||
+        normalizedDisplayName === "timeline";
+      const looksLikeQuote =
+        normalizedResolvedName === "quote" || normalizedDisplayName === "quote";
+      const looksLikeBadge =
+        normalizedResolvedName === "badge" || normalizedDisplayName === "badge";
+
+      if (looksLikeTimeline) {
+        resolvedName = "Timeline";
+      }
+
+      if (looksLikeQuote) {
+        resolvedName = "Quote";
+      }
+
+      if (looksLikeBadge) {
+        resolvedName = "Badge";
+      }
+
       if (!resolvedName || !validResolvedNames.includes(resolvedName)) {
         sanitizedConfig[nodeId] = {
           ...node,
           type: { resolvedName: "Container" },
           displayName: node.displayName || "Container",
           props: node.props || {},
+        };
+      }
+
+      if (resolvedName === "Timeline") {
+        const props = (node.props as Record<string, unknown>) || {};
+        sanitizedConfig[nodeId] = {
+          ...node,
+          type: { resolvedName: "Timeline" },
+          displayName: "Timeline",
+          props: {
+            ...props,
+            backgroundColor: "#ecfeff",
+            textColor: "#0f172a",
+            titleColor: "#082f49",
+            subtitleColor: "#0369a1",
+            bodyTextColor: "#334155",
+            borderRadius: "28px",
+            borderColor: "rgba(14, 165, 233, 0.22)",
+            boxShadow: "0 28px 60px rgba(2,132,199,0.16)",
+          },
+        };
+      }
+
+      if (resolvedName === "Quote") {
+        const props = (node.props as Record<string, unknown>) || {};
+        sanitizedConfig[nodeId] = {
+          ...node,
+          type: { resolvedName: "Quote" },
+          displayName: "Quote",
+          props: {
+            ...props,
+            backgroundColor: "#f5f3ff",
+            textColor: "#1e1b4b",
+            titleColor: "#312e81",
+            subtitleColor: "#6d28d9",
+            bodyTextColor: "#4338ca",
+            borderRadius: "28px",
+            borderColor: "rgba(167, 139, 250, 0.28)",
+            boxShadow: "0 28px 60px rgba(91,33,182,0.16)",
+          },
+        };
+      }
+
+      if (resolvedName === "Badge") {
+        const props = (node.props as Record<string, unknown>) || {};
+        sanitizedConfig[nodeId] = {
+          ...node,
+          type: { resolvedName: "Badge" },
+          displayName: "Badge",
+          props: {
+            ...props,
+            titleColor: "#7c2d12",
+            subtitleColor: "#9a3412",
+            bodyTextColor: "#92400e",
+            borderRadius: "999px",
+            borderColor: "rgba(251,146,60,0.45)",
+            boxShadow: "0 20px 40px rgba(217,119,6,0.2)",
+            backgroundColor: "#fef3c7",
+            textColor: "#111827",
+          },
         };
       }
 
@@ -1103,13 +1189,18 @@ export default function EditPage({ params }: PageProps) {
                 ...data,
                 useHtml: false,
                 jsonConfig: toPageJson(
-                  createHtmlCraftConfig(
-                    data.htmlContent as string,
-                    data.jsonConfig,
+                  sanitizeJsonConfig(
+                    createHtmlCraftConfig(
+                      data.htmlContent as string,
+                      data.jsonConfig,
+                    ),
                   ),
                 ),
               }
-            : data,
+            : {
+                ...data,
+                jsonConfig: toPageJson(sanitizeJsonConfig(data.jsonConfig)),
+              },
         );
       } catch (error) {
         console.error("Failed to fetch page:", error);
