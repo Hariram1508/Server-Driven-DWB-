@@ -49,9 +49,10 @@ const shouldForceEmptyTextComponent = (message: string, type: unknown) => {
     return false;
   }
 
-  const explicitBlankIntent = /\b(empty|blank|without|no\s+text|no\s+content|do\s*not\s+write|don't\s+write|only\s+component|component\s+only|only\s+add\s+text\s+component|text\s+component\s+only)\b/i.test(
-    normalizedMessage,
-  );
+  const explicitBlankIntent =
+    /\b(empty|blank|without|no\s+text|no\s+content|do\s*not\s+write|don't\s+write|only\s+component|component\s+only|only\s+add\s+text\s+component|text\s+component\s+only)\b/i.test(
+      normalizedMessage,
+    );
 
   if (explicitBlankIntent) {
     return true;
@@ -226,19 +227,29 @@ export const AIChat = ({
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [openingThreadId, setOpeningThreadId] = useState<string | null>(null);
   const [complianceScore, setComplianceScore] = useState<number | null>(null);
-  const { actions, query, selectedCanvasId } = useEditor((state) => {
-    const [currentSelectedId] = state.events.selected;
-    const selectedNode = currentSelectedId
-      ? state.nodes[currentSelectedId]
-      : null;
+  const { actions, query, selectedCanvasId, selectedNodeId, selectedNodeType } =
+    useEditor((state) => {
+      const [currentSelectedId] = state.events.selected;
+      const selectedNode = currentSelectedId
+        ? state.nodes[currentSelectedId]
+        : null;
 
-    return {
-      selectedCanvasId:
-        selectedNode?.data.isCanvas && currentSelectedId
-          ? currentSelectedId
-          : undefined,
-    };
-  });
+      return {
+        selectedCanvasId:
+          selectedNode?.data.isCanvas && currentSelectedId
+            ? currentSelectedId
+            : undefined,
+        selectedNodeId:
+          currentSelectedId && currentSelectedId !== "ROOT"
+            ? currentSelectedId
+            : undefined,
+        selectedNodeType:
+          (selectedNode?.data?.type as { resolvedName?: string } | undefined)
+            ?.resolvedName ||
+          selectedNode?.data?.displayName ||
+          undefined,
+      };
+    });
 
   const findFirstCanvasNodeId = (nodeId: string): string | undefined => {
     try {
@@ -375,6 +386,94 @@ export const AIChat = ({
     } catch {
       return { components: [], meta: {} };
     }
+  };
+
+  const getEditorNodes = () => {
+    try {
+      const serialized = JSON.parse(query.serialize()) as Record<string, any>;
+      return Object.entries(serialized)
+        .filter(([id]) => id !== "ROOT")
+        .map(([id, node]) => ({
+          id,
+          type: String(node?.type?.resolvedName || node?.displayName || ""),
+          props: (node?.props || {}) as Record<string, any>,
+        }));
+    } catch {
+      return [] as Array<{
+        id: string;
+        type: string;
+        props: Record<string, any>;
+      }>;
+    }
+  };
+
+  const resolveTargetNodeId = (
+    target?: Record<string, any>,
+    preferredType?: string,
+  ) => {
+    const targetId = String(target?.id || "").trim();
+    if (targetId) {
+      try {
+        query.node(targetId).get();
+        return targetId;
+      } catch {
+        // Ignore and continue fallback lookup.
+      }
+    }
+
+    if (selectedNodeId) {
+      return selectedNodeId;
+    }
+
+    const nodes = getEditorNodes();
+    const normalizedType = String(
+      preferredType || target?.type || target?.componentType || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    if (normalizedType) {
+      const typed = [...nodes].reverse().find((node) => {
+        const nodeType = node.type.toLowerCase();
+        return (
+          nodeType === normalizedType ||
+          nodeType.includes(normalizedType) ||
+          normalizedType.includes(nodeType)
+        );
+      });
+      if (typed) return typed.id;
+    }
+
+    return nodes.length ? nodes[nodes.length - 1].id : undefined;
+  };
+
+  const normalizeUpdateProps = (input: Record<string, any> = {}) => {
+    const normalized: Record<string, any> = { ...input };
+    const primaryText = [
+      normalized.text,
+      normalized.content,
+      normalized.description,
+      normalized.body,
+      normalized.title,
+      normalized.subtitle,
+    ].find((value) => typeof value === "string" && value.trim().length > 0);
+
+    if (typeof primaryText === "string") {
+      for (const key of [
+        "text",
+        "content",
+        "description",
+        "body",
+        "title",
+        "subtitle",
+      ]) {
+        if (!(key in normalized)) {
+          normalized[key] = primaryText;
+        }
+      }
+    }
+
+    return normalized;
   };
 
   const buildCompactCommandContext = () => {
@@ -619,11 +718,106 @@ export const AIChat = ({
       ]);
     }
 
+    if (operation.action === "update") {
+      const targetId = resolveTargetNodeId(
+        operation.target,
+        operation.component?.type || selectedNodeType,
+      );
+      if (!targetId) {
+        toast.error("No component found to update.");
+        return;
+      }
+
+      const rawProps =
+        operation.component?.props ||
+        operation.props ||
+        operation.target?.props;
+      const safeProps = sanitizeAiComponentProps(
+        normalizeUpdateProps(rawProps),
+      );
+
+      if (!Object.keys(safeProps).length) {
+        toast.error("No valid properties were returned for update.");
+        return;
+      }
+
+      actions.setProp(targetId, (props: Record<string, any>) => {
+        Object.assign(props, safeProps);
+      });
+      toast.success("Component updated");
+      return;
+    }
+
+    if (operation.action === "delete") {
+      const targetId = resolveTargetNodeId(
+        operation.target,
+        operation.component?.type || selectedNodeType,
+      );
+      if (!targetId || targetId === "ROOT") {
+        toast.error("No component found to delete.");
+        return;
+      }
+
+      actions.delete(targetId);
+      toast.success("Component deleted");
+      return;
+    }
+
+    if (operation.action === "move") {
+      const targetId = resolveTargetNodeId(
+        operation.target,
+        operation.component?.type || selectedNodeType,
+      );
+      if (!targetId || targetId === "ROOT") {
+        toast.error("No component found to move.");
+        return;
+      }
+
+      try {
+        const node = query.node(targetId).get() as Record<string, any>;
+        const parentId = String(node?.data?.parent || "ROOT");
+        const parentNode = query.node(parentId).get() as Record<string, any>;
+        const siblingIds = Array.isArray(parentNode?.data?.nodes)
+          ? parentNode.data.nodes
+          : [];
+
+        const requestedPosition = String(
+          operation.position ||
+            operation.component?.position ||
+            operation.to?.position ||
+            operation.target?.position ||
+            "append",
+        ).toLowerCase();
+
+        let nextIndex = siblingIds.length - 1;
+        if (/prepend|top|start|first/.test(requestedPosition)) {
+          nextIndex = 0;
+        } else if (/append|bottom|end|last/.test(requestedPosition)) {
+          nextIndex = Math.max(0, siblingIds.length - 1);
+        } else {
+          const parsed = Number(requestedPosition);
+          if (Number.isFinite(parsed)) {
+            nextIndex = Math.max(
+              0,
+              Math.min(siblingIds.length - 1, Math.floor(parsed)),
+            );
+          }
+        }
+
+        actions.move(targetId, parentId, nextIndex);
+        toast.success("Component moved");
+      } catch (error) {
+        console.error("Failed to move component", error);
+        toast.error("Could not move component.");
+      }
+      return;
+    }
+
     if (operation.action === "insert" && operation.component) {
       const { type, props, position } = operation.component;
       const finalProps = shouldForceEmptyTextComponent(userMessage, type)
         ? buildEmptyTextProps(props || {})
-        : { ...(props || {}) };
+        : normalizeUpdateProps({ ...(props || {}) });
 
       const typeKey = Object.keys(ComponentMapper).find(
         (k) => k.toLowerCase() === String(type).toLowerCase(),

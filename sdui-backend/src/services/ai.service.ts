@@ -151,6 +151,32 @@ export class AIService {
     );
   }
 
+  private normalizeTextComponentProps(
+    props: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const primaryText = [
+      props.content,
+      props.text,
+      props.description,
+      props.body,
+      props.title,
+      props.subtitle,
+      props.children,
+    ].find((value) => typeof value === "string" && value.trim().length > 0);
+
+    if (typeof primaryText !== "string") {
+      return props;
+    }
+
+    return {
+      ...props,
+      text: props.text ?? primaryText,
+      content: props.content ?? primaryText,
+      description: props.description ?? primaryText,
+      body: props.body ?? primaryText,
+    };
+  }
+
   private extractTopicFromCommand(command: string): string {
     const lowered = command.toLowerCase();
     const aboutMatch = lowered.match(
@@ -377,10 +403,10 @@ Only respond with valid JSON, no explanations.`;
         }
 
         if (this.isTextLikeComponentType(jsonOperation.component.type)) {
-          const componentProps = (jsonOperation.component.props || {}) as Record<
-            string,
-            unknown
-          >;
+          const componentProps = this.normalizeTextComponentProps(
+            (jsonOperation.component.props || {}) as Record<string, unknown>,
+          );
+          jsonOperation.component.props = componentProps;
 
           if (
             this.shouldGenerateTextComponentContent(command) &&
@@ -421,7 +447,7 @@ Only respond with valid JSON, no explanations.`;
       console.error("AI command processing error:", error);
       return {
         success: false,
-        error: "Failed to process command",
+        error: this.getErrorMessage(error),
       };
     }
   }
@@ -713,6 +739,34 @@ Only return valid JSON. Do not include markdown code blocks or explanations.`;
         true,
       );
       const componentData = JSON.parse(responseText);
+
+      const normalizedType = String(componentData?.type || "RawHTML").trim();
+      componentData.name =
+        typeof componentData?.name === "string" && componentData.name.trim()
+          ? componentData.name.trim()
+          : `${normalizedType} Component`;
+      componentData.description =
+        typeof componentData?.description === "string"
+          ? componentData.description
+          : "AI generated component";
+      componentData.type = normalizedType;
+      componentData.props =
+        componentData?.props && typeof componentData.props === "object"
+          ? componentData.props
+          : {};
+
+      if (this.isTextLikeComponentType(componentData?.type)) {
+        componentData.props = this.normalizeTextComponentProps(
+          componentData.props as Record<string, unknown>,
+        );
+      }
+
+      if (
+        typeof componentData?.jsxCode !== "string" ||
+        !componentData.jsxCode.trim()
+      ) {
+        componentData.jsxCode = `<${normalizedType} />`;
+      }
 
       if (
         this.isTextLikeComponentType(componentData?.type) &&
@@ -1526,7 +1580,23 @@ ${cleanHtml}
     throw new AppError("AI service not configured", 503, "AI_NOT_CONFIGURED");
   }
 
-  private async callModel(
+  private isProviderConfigured(provider: "anthropic" | "groq" | "openai") {
+    return Boolean(
+      (provider === "anthropic" && this.anthropic) ||
+      (provider === "groq" && this.groq) ||
+      (provider === "openai" && this.openai),
+    );
+  }
+
+  private defaultModelForProvider(
+    provider: "anthropic" | "groq" | "openai",
+  ): string {
+    if (provider === "anthropic") return "claude-3-5-sonnet-20241022";
+    if (provider === "groq") return "llama-3.3-70b-versatile";
+    return "gpt-4o-mini";
+  }
+
+  private async callSingleProvider(
     provider: "anthropic" | "groq" | "openai",
     model: string,
     prompt: string,
@@ -1577,6 +1647,47 @@ ${cleanHtml}
       response_format: jsonMode ? { type: "json_object" } : undefined,
     });
     return response.choices[0].message.content || "";
+  }
+
+  private async callModel(
+    provider: "anthropic" | "groq" | "openai",
+    model: string,
+    prompt: string,
+    jsonMode: boolean,
+  ): Promise<string> {
+    const candidates: Array<{
+      provider: "anthropic" | "groq" | "openai";
+      model: string;
+    }> = [{ provider, model }];
+
+    (["anthropic", "groq", "openai"] as const)
+      .filter((candidateProvider) => candidateProvider !== provider)
+      .forEach((candidateProvider) => {
+        if (!this.isProviderConfigured(candidateProvider)) return;
+        candidates.push({
+          provider: candidateProvider,
+          model: this.defaultModelForProvider(candidateProvider),
+        });
+      });
+
+    let lastError: unknown;
+    for (const candidate of candidates) {
+      try {
+        return await this.callSingleProvider(
+          candidate.provider,
+          candidate.model,
+          prompt,
+          jsonMode,
+        );
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `AI provider call failed (${candidate.provider}/${candidate.model}). Trying fallback if available...`,
+        );
+      }
+    }
+
+    throw lastError || new Error("No AI provider available");
   }
 
   private getErrorMessage(error: unknown): string {
