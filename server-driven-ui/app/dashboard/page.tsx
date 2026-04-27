@@ -48,6 +48,7 @@ import {
   Files,
   Settings2,
   Save,
+  Layout as LayoutIcon,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
@@ -1972,6 +1973,13 @@ export default function DashboardPage() {
                   >
                     <Files className="w-3.5 h-3.5" />
                     Media Hub
+                  </Link>
+                  <Link
+                    href="/dashboard/templates"
+                    className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                  >
+                    <LayoutIcon className="w-3.5 h-3.5" />
+                    Templates
                   </Link>
                   <button
                     onClick={selectAllFilteredPages}
