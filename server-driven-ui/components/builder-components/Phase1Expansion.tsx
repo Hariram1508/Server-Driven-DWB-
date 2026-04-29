@@ -5,6 +5,37 @@ import { useEditor, useNode } from "@craftjs/core";
 import { useRouter } from "next/navigation";
 
 type BaseProps = {
+  // ===== UNIVERSAL LAYOUT PROPERTIES (MANDATORY FOR ALL COMPONENTS) =====
+  // Position & Layout
+  position?: "static" | "relative" | "absolute" | "fixed";
+  top?: string;
+  right?: string;
+  bottom?: string;
+  left?: string;
+  zIndex?: number;
+  
+  // Sizing
+  width?: string;
+  height?: string;
+  minWidth?: string;
+  maxWidth?: string;
+  minHeight?: string;
+  maxHeight?: string;
+  
+  // Margins
+  margin?: string;
+  marginTop?: string;
+  marginRight?: string;
+  marginBottom?: string;
+  marginLeft?: string;
+  
+  // Padding
+  paddingTop?: string;
+  paddingRight?: string;
+  paddingBottom?: string;
+  paddingLeft?: string;
+  
+  // ===== COMPONENT CONTENT =====
   title?: string;
   subtitle?: string;
   description?: string;
@@ -41,6 +72,49 @@ type BaseProps = {
   buttonColor?: string;
   buttonTextColor?: string;
   buttonHoverColor?: string;
+  // Badge specific properties - Sizing
+  badgeSize?: "small" | "medium" | "large" | "custom";
+  badgeWidth?: string;
+  badgeHeight?: string;
+  badgeAlignment?: "left" | "center" | "right";
+  iconBgColor?: string;
+  iconStyle?: "circle" | "square" | "rounded" | "none";
+  // Badge specific properties - Positioning
+  badgePosition?: "static" | "relative" | "absolute" | "fixed";
+  badgeTop?: string;
+  badgeRight?: string;
+  badgeBottom?: string;
+  badgeLeft?: string;
+  badgeZIndex?: number;
+  // Badge specific properties - Spacing
+  badgeMargin?: string;
+  badgeMarginTop?: string;
+  badgeMarginRight?: string;
+  badgeMarginBottom?: string;
+  badgeMarginLeft?: string;
+  // Badge specific properties - Transform & Animation
+  badgeTransform?: string;
+  badgeRotate?: number;
+  badgeScale?: number;
+  badgeOpacity?: number;
+  badgeAnimation?: "none" | "pulse" | "bounce" | "float" | "float-reverse" | "glow";
+  badgeAnimationDuration?: string;
+  badgeAnimationDelay?: string;
+  // Badge specific properties - Border
+  borderWidth?: string;
+  borderStyle?: "solid" | "dashed" | "dotted" | "double";
+  // Badge specific properties - Advanced
+  badgeRotateOnHover?: number;
+  badgeScaleOnHover?: number;
+  shadowColor?: string;
+  shadowBlur?: string;
+  shadowSpread?: string;
+  shadowOpacity?: number;
+  backgroundGradient?: string;
+  countBadge?: boolean;
+  countNumber?: string;
+  countBgColor?: string;
+  countTextColor?: string;
 };
 
 const splitItems = (items?: string) =>
@@ -48,6 +122,24 @@ const splitItems = (items?: string) =>
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
+
+// Helper function to calculate universal layout styles
+const getLayoutStyles = (props: BaseProps) => ({
+  position: props.position as any,
+  top: props.position !== "static" ? props.top : "auto",
+  right: props.position !== "static" ? props.right : "auto",
+  bottom: props.position !== "static" ? props.bottom : "auto",
+  left: props.position !== "static" ? props.left : "auto",
+  zIndex: props.position !== "static" ? props.zIndex : "auto",
+  width: props.width || "100%",
+  height: props.height || "auto",
+  minWidth: props.minWidth || "auto",
+  maxWidth: props.maxWidth || "100%",
+  minHeight: props.minHeight || "auto",
+  maxHeight: props.maxHeight || "auto",
+  margin: props.margin || `${props.marginTop || "0"} ${props.marginRight || "0"} ${props.marginBottom || "0"} ${props.marginLeft || "0"}`,
+  boxSizing: "border-box" as const,
+});
 
 const FONT_FAMILY_OPTIONS = [
   "inherit",
@@ -60,6 +152,269 @@ const FONT_FAMILY_OPTIONS = [
   "Lora, serif",
   "JetBrains Mono, monospace",
 ];
+
+// ===== UNIVERSAL LAYOUT SETTINGS COMPONENT (Used in all components) =====
+const LayoutSettings = () => {
+  const {
+    actions: { setProp },
+    props,
+  } = useNode((node) => ({ props: node.data.props as BaseProps }));
+
+  const calculateMargin = () => {
+    if (props.margin && props.margin !== "0") return props.margin;
+    return `${props.marginTop || "0"} ${props.marginRight || "0"} ${props.marginBottom || "0"} ${props.marginLeft || "0"}`;
+  };
+
+  const calculatePadding = () => {
+    if (props.padding && props.padding !== "0") return props.padding;
+    return `${props.paddingTop || "0"} ${props.paddingRight || "0"} ${props.paddingBottom || "0"} ${props.paddingLeft || "0"}`;
+  };
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-semibold text-xs text-gray-700">LAYOUT & SPACING</h4>
+      
+      {/* POSITION TYPE */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Position</label>
+        <select
+          value={props.position ?? "static"}
+          onChange={(e) =>
+            setProp((p: BaseProps) => (p.position = e.target.value as BaseProps["position"]))
+          }
+          className="w-full px-3 py-2 border rounded text-sm"
+        >
+          <option value="static">Static (Normal)</option>
+          <option value="relative">Relative</option>
+          <option value="absolute">Absolute</option>
+          <option value="fixed">Fixed</option>
+        </select>
+      </div>
+
+      {/* POSITIONING COORDINATES */}
+      {props.position !== "static" && (
+        <div className="grid grid-cols-4 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Top</label>
+            <input
+              value={props.top ?? "0"}
+              onChange={(e) => setProp((p: BaseProps) => (p.top = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Right</label>
+            <input
+              value={props.right ?? "auto"}
+              onChange={(e) => setProp((p: BaseProps) => (p.right = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="auto"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Bottom</label>
+            <input
+              value={props.bottom ?? "auto"}
+              onChange={(e) => setProp((p: BaseProps) => (p.bottom = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="auto"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Left</label>
+            <input
+              value={props.left ?? "auto"}
+              onChange={(e) => setProp((p: BaseProps) => (p.left = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="auto"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* SIZING */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Width</label>
+          <input
+            value={props.width ?? "100%"}
+            onChange={(e) => setProp((p: BaseProps) => (p.width = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="100%"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Height</label>
+          <input
+            value={props.height ?? "auto"}
+            onChange={(e) => setProp((p: BaseProps) => (p.height = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="auto"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Min Width</label>
+          <input
+            value={props.minWidth ?? "auto"}
+            onChange={(e) => setProp((p: BaseProps) => (p.minWidth = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="auto"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Max Width</label>
+          <input
+            value={props.maxWidth ?? "100%"}
+            onChange={(e) => setProp((p: BaseProps) => (p.maxWidth = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="100%"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Min Height</label>
+          <input
+            value={props.minHeight ?? "auto"}
+            onChange={(e) => setProp((p: BaseProps) => (p.minHeight = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="auto"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Max Height</label>
+          <input
+            value={props.maxHeight ?? "auto"}
+            onChange={(e) => setProp((p: BaseProps) => (p.maxHeight = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="auto"
+          />
+        </div>
+      </div>
+
+      {/* Z-INDEX for absolute/fixed */}
+      {(props.position === "absolute" || props.position === "fixed") && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Z-Index ({props.zIndex ?? 10})</label>
+          <input
+            type="range"
+            min="0"
+            max="1000"
+            step="10"
+            value={props.zIndex ?? 10}
+            onChange={(e) => setProp((p: BaseProps) => (p.zIndex = Number(e.target.value)))}
+            className="w-full"
+          />
+        </div>
+      )}
+
+      {/* MARGINS */}
+      <div className="border-t pt-2">
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Margin (All)</label>
+        <input
+          value={props.margin ?? "0"}
+          onChange={(e) => setProp((p: BaseProps) => (p.margin = e.target.value))}
+          className="w-full px-3 py-2 border rounded text-sm"
+          placeholder="0"
+        />
+      </div>
+
+      <div className="grid grid-cols-4 gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">MT</label>
+          <input
+            value={props.marginTop ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.marginTop = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">MR</label>
+          <input
+            value={props.marginRight ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.marginRight = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">MB</label>
+          <input
+            value={props.marginBottom ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.marginBottom = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">ML</label>
+          <input
+            value={props.marginLeft ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.marginLeft = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+      </div>
+
+      {/* PADDING */}
+      <div className="border-t pt-2">
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Padding (All)</label>
+        <input
+          value={props.padding ?? "0"}
+          onChange={(e) => setProp((p: BaseProps) => (p.padding = e.target.value))}
+          className="w-full px-3 py-2 border rounded text-sm"
+          placeholder="0"
+        />
+      </div>
+
+      <div className="grid grid-cols-4 gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">PT</label>
+          <input
+            value={props.paddingTop ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.paddingTop = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">PR</label>
+          <input
+            value={props.paddingRight ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.paddingRight = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">PB</label>
+          <input
+            value={props.paddingBottom ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.paddingBottom = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">PL</label>
+          <input
+            value={props.paddingLeft ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.paddingLeft = e.target.value))}
+            className="w-full px-2 py-1 border rounded text-xs"
+            placeholder="0"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const BaseSettings = ({ showItems = false }: { showItems?: boolean }) => {
   const {
@@ -87,6 +442,11 @@ const BaseSettings = ({ showItems = false }: { showItems?: boolean }) => {
 
   return (
     <div className="p-4 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+      {/* UNIVERSAL LAYOUT SETTINGS - Available for all components */}
+      <div className="border-b pb-3">
+        <LayoutSettings />
+      </div>
+
       <div>
         <label className="block text-xs font-semibold text-gray-600 mb-1.5">
           Title
@@ -976,53 +1336,59 @@ const GridSectionSettings = () => {
 
   return (
     <div className="p-4 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          value={props.sectionTitle ?? ""}
-          onChange={(e) =>
-            setProp((p: GridSectionProps) => (p.sectionTitle = e.target.value))
-          }
-          className="w-full px-3 py-2 border rounded text-sm"
-          placeholder="Section Title"
-        />
-        <select
-          value={props.gridColumns ?? 3}
-          onChange={(e) =>
-            setProp(
-              (p: GridSectionProps) =>
-                (p.gridColumns = Number(e.target.value) as 1 | 2 | 3 | 4),
-            )
-          }
-          className="w-full px-3 py-2 border rounded text-sm"
-        >
-          <option value={1}>1 Column</option>
-          <option value={2}>2 Columns</option>
-          <option value={3}>3 Columns</option>
-          <option value={4}>4 Columns</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-          Cards (Title|Description|Button Label|URL)
-        </label>
-        <textarea
-          value={props.cardRowsData ?? ""}
-          onChange={(e) =>
-            setProp((p: GridSectionProps) => (p.cardRowsData = e.target.value))
-          }
-          rows={6}
-          className="w-full px-3 py-2 border rounded text-sm"
-        />
-        <QuickRowAdder
-          label="Quick Add Card"
-          placeholders={["Title", "Description", "Button Label", "URL"]}
-          onAdd={(values) =>
-            setProp(
-              (p: GridSectionProps) =>
-                (p.cardRowsData = appendRow(p.cardRowsData, values)),
-            )
-          }
-        />
+      {/* LAYOUT & SPACING SECTION */}
+      <LayoutSettings />
+
+      {/* CONTENT SECTION */}
+      <div className="border-t pt-3">
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            value={props.sectionTitle ?? ""}
+            onChange={(e) =>
+              setProp((p: GridSectionProps) => (p.sectionTitle = e.target.value))
+            }
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="Section Title"
+          />
+          <select
+            value={props.gridColumns ?? 3}
+            onChange={(e) =>
+              setProp(
+                (p: GridSectionProps) =>
+                  (p.gridColumns = Number(e.target.value) as 1 | 2 | 3 | 4),
+              )
+            }
+            className="w-full px-3 py-2 border rounded text-sm"
+          >
+            <option value={1}>1 Column</option>
+            <option value={2}>2 Columns</option>
+            <option value={3}>3 Columns</option>
+            <option value={4}>4 Columns</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            Cards (Title|Description|Button Label|URL)
+          </label>
+          <textarea
+            value={props.cardRowsData ?? ""}
+            onChange={(e) =>
+              setProp((p: GridSectionProps) => (p.cardRowsData = e.target.value))
+            }
+            rows={6}
+            className="w-full px-3 py-2 border rounded text-sm"
+          />
+          <QuickRowAdder
+            label="Quick Add Card"
+            placeholders={["Title", "Description", "Button Label", "URL"]}
+            onAdd={(values) =>
+              setProp(
+                (p: GridSectionProps) =>
+                  (p.cardRowsData = appendRow(p.cardRowsData, values)),
+              )
+            }
+          />
+        </div>
       </div>
       <BaseSettings />
     </div>
@@ -1301,13 +1667,998 @@ const GallerySettings = () => {
   },
 };
 
-export const Testimonial = createSimpleComponent("Testimonial", {
-  subtitle: "Student Voice",
-  description: "The faculty mentorship helped me grow quickly.",
-  backgroundColor: "#eff6ff",
-});
+type TestimonialProps = BaseProps & {
+  // Content
+  testimonialText?: string;
+  authorName?: string;
+  authorTitle?: string;
+  authorCompany?: string;
+  authorAvatar?: string;
+  // Rating
+  rating?: number;
+  showRating?: boolean;
+  // Layout & Display
+  layout?: "card" | "minimal" | "highlighted" | "compact";
+  showQuoteIcon?: boolean;
+  showAuthorAvatar?: boolean;
+  avatarSize?: string;
+  avatarShape?: "circle" | "rounded";
+  // Styling
+  backgroundColor?: string;
+  cardBgColor?: string;
+  textColor?: string;
+  authorTextColor?: string;
+  ratingColor?: string;
+  accentColor?: string;
+  borderColor?: string;
+  borderWidth?: string;
+  borderRadius?: string;
+  shadowLevel?: "none" | "light" | "medium" | "heavy";
+  padding?: string;
+  gap?: string;
+  // Typography
+  testimonialSize?: string;
+  authorNameSize?: string;
+  authorTitleSize?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  lineHeight?: string;
+  // Hover & Animation
+  hoverEffect?: "none" | "lift" | "glow" | "shadow";
+  animationType?: "none" | "fadeIn" | "slideIn" | "scaleIn";
+  animationDuration?: string;
+  // Responsive
+  maxWidth?: string;
+};
+
+const renderStars = (rating: number, color: string) => {
+  return (
+    <div style={{ display: "flex", gap: "2px" }}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <span
+          key={star}
+          style={{
+            color: star <= rating ? color : "#d1d5db",
+            fontSize: "16px",
+            cursor: "default",
+          }}
+        >
+          ★
+        </span>
+      ))}
+    </div>
+  );
+};
+
+export const Testimonial = ({
+  // Universal Layout
+  position = "static",
+  top = "0",
+  right = "auto",
+  bottom = "auto",
+  left = "auto",
+  zIndex = 10,
+  width = "100%",
+  height = "auto",
+  minWidth = "auto",
+  maxWidth = "100%",
+  minHeight = "auto",
+  maxHeight = "auto",
+  margin = "0",
+  marginTop = "0",
+  marginRight = "0",
+  marginBottom = "0",
+  marginLeft = "0",
+  // Content
+  testimonialText = "This experience was transformative. The team went above and beyond to ensure success. I highly recommend their services to anyone looking for excellence.",
+  authorName = "Sarah Johnson",
+  authorTitle = "Student",
+  authorCompany = "Class of 2026",
+  authorAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
+  // Rating
+  rating = 5,
+  showRating = true,
+  // Layout
+  layout = "card",
+  showQuoteIcon = true,
+  showAuthorAvatar = true,
+  avatarSize = "48px",
+  avatarShape = "circle",
+  // Styling
+  backgroundColor = "#ffffff",
+  cardBgColor = "#f8fafc",
+  textColor = "#1e293b",
+  authorTextColor = "#64748b",
+  ratingColor = "#fbbf24",
+  accentColor = "#3b82f6",
+  borderColor = "#e2e8f0",
+  borderWidth = "1px",
+  borderRadius = "12px",
+  shadowLevel = "medium",
+  padding = "24px",
+  gap = "12px",
+  // Typography
+  testimonialSize = "16px",
+  authorNameSize = "15px",
+  authorTitleSize = "13px",
+  fontFamily = "inherit",
+  fontWeight = "500",
+  lineHeight = "1.6",
+  // Hover & Animation
+  hoverEffect = "lift",
+  animationType = "fadeIn",
+  animationDuration = "0.6s",
+  // Responsive
+  maxWidth: maxWidthProp = "500px",
+}: TestimonialProps) => {
+  const { connectors: { connect, drag }, isHovered } = useNode();
+  const [isHovering, setIsHovering] = React.useState(false);
+
+  const shadowMap = {
+    none: "none",
+    light: "0 1px 3px rgba(0,0,0,0.1)",
+    medium: "0 4px 12px rgba(0,0,0,0.1)",
+    heavy: "0 12px 24px rgba(0,0,0,0.15)",
+  };
+
+  const hoverStyleMap = {
+    none: {},
+    lift: { transform: "translateY(-8px)" },
+    glow: { boxShadow: `0 0 20px ${accentColor}40` },
+    shadow: { boxShadow: shadowMap.heavy },
+  };
+
+  const getAnimationStyle = (): React.CSSProperties => {
+    if (animationType === "none") return {};
+    return {
+      animation: `${animationType} ${animationDuration} ease-out`,
+    };
+  };
+
+  const containerStyle: React.CSSProperties = {
+    ...getLayoutStyles({ position, top, right, bottom, left, zIndex, width, height, minWidth, maxWidth, minHeight, maxHeight, margin, marginTop, marginRight, marginBottom, marginLeft } as BaseProps),
+    maxWidth: maxWidthProp,
+  };
+
+  // Card Layout (Default - Full Featured)
+  if (layout === "card") {
+    return (
+      <div
+        ref={(ref: HTMLDivElement | null) => {
+          if (ref) connect(drag(ref));
+        }}
+        style={{
+          ...containerStyle,
+          backgroundColor,
+          padding: "24px",
+          borderRadius,
+        }}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
+        <style>{`
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+          @keyframes scaleIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+          }
+        `}</style>
+
+        {/* Main Card */}
+        <div
+          style={{
+            backgroundColor: cardBgColor,
+            border: `${borderWidth} solid ${borderColor}`,
+            borderRadius,
+            padding,
+            display: "flex",
+            flexDirection: "column",
+            gap,
+            boxShadow: isHovering ? shadowMap.heavy : shadowMap[shadowLevel],
+            transition: "all 0.3s ease",
+            ...hoverStyleMap[hoverEffect],
+            ...getAnimationStyle(),
+          }}
+        >
+          {/* Quote Icon & Rating Row */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            {showQuoteIcon && (
+              <div
+                style={{
+                  fontSize: "32px",
+                  color: accentColor,
+                  opacity: 0.3,
+                  fontWeight: "bold",
+                }}
+              >
+                "
+              </div>
+            )}
+            {showRating && renderStars(rating, ratingColor)}
+          </div>
+
+          {/* Testimonial Text */}
+          <p
+            style={{
+              margin: 0,
+              fontSize: testimonialSize,
+              color: textColor,
+              fontFamily,
+              fontWeight,
+              lineHeight,
+              fontStyle: "italic",
+            }}
+          >
+            {testimonialText}
+          </p>
+
+          {/* Divider */}
+          <div
+            style={{
+              height: "1px",
+              background: `linear-gradient(to right, ${accentColor}20, transparent)`,
+              margin: "8px 0",
+            }}
+          />
+
+          {/* Author Info */}
+          <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+            {showAuthorAvatar && (
+              <img
+                src={authorAvatar}
+                alt={authorName}
+                style={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarShape === "circle" ? "50%" : "8px",
+                  objectFit: "cover",
+                  border: `2px solid ${accentColor}`,
+                }}
+              />
+            )}
+            <div style={{ flex: 1 }}>
+              <p
+                style={{
+                  margin: "0 0 2px 0",
+                  fontSize: authorNameSize,
+                  color: textColor,
+                  fontWeight: "700",
+                  fontFamily,
+                }}
+              >
+                {authorName}
+              </p>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: authorTitleSize,
+                  color: authorTextColor,
+                  fontFamily,
+                }}
+              >
+                {authorTitle}
+              </p>
+              {authorCompany && (
+                <p
+                  style={{
+                    margin: "2px 0 0 0",
+                    fontSize: authorTitleSize,
+                    color: accentColor,
+                    fontWeight: "600",
+                    fontFamily,
+                  }}
+                >
+                  {authorCompany}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Minimal Layout (Clean & Simple)
+  if (layout === "minimal") {
+    return (
+      <div
+        ref={(ref: HTMLDivElement | null) => {
+          if (ref) connect(drag(ref));
+        }}
+        style={{
+          ...containerStyle,
+          backgroundColor,
+          padding,
+        }}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
+        <div
+          style={{
+            borderLeft: `4px solid ${accentColor}`,
+            paddingLeft: "20px",
+            transition: "all 0.3s ease",
+            ...getAnimationStyle(),
+            ...(isHovering && { borderLeftWidth: "6px" }),
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 12px 0",
+              fontSize: testimonialSize,
+              color: textColor,
+              fontFamily,
+              fontWeight,
+              lineHeight,
+            }}
+          >
+            {testimonialText}
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: authorNameSize,
+              color: textColor,
+              fontWeight: "700",
+              fontFamily,
+            }}
+          >
+            — {authorName}
+          </p>
+          {authorTitle && (
+            <p
+              style={{
+                margin: "2px 0 0 0",
+                fontSize: authorTitleSize,
+                color: authorTextColor,
+                fontFamily,
+              }}
+            >
+              {authorTitle}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Highlighted Layout (Featured)
+  if (layout === "highlighted") {
+    return (
+      <div
+        ref={(ref: HTMLDivElement | null) => {
+          if (ref) connect(drag(ref));
+        }}
+        style={{
+          ...containerStyle,
+          backgroundColor,
+          padding,
+        }}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
+        <div
+          style={{
+            background: `linear-gradient(135deg, ${accentColor}10, ${accentColor}05)`,
+            border: `2px solid ${accentColor}`,
+            borderRadius,
+            padding,
+            display: "flex",
+            flexDirection: "column",
+            gap,
+            position: "relative",
+            overflow: "hidden",
+            transition: "all 0.3s ease",
+            ...getAnimationStyle(),
+            ...(isHovering && { borderColor: accentColor, boxShadow: `0 0 20px ${accentColor}30` }),
+          }}
+        >
+          {/* Accent decoration */}
+          <div
+            style={{
+              position: "absolute",
+              top: "-20px",
+              right: "-20px",
+              width: "100px",
+              height: "100px",
+              background: `radial-gradient(circle, ${accentColor}15, transparent)`,
+              borderRadius: "50%",
+              pointerEvents: "none",
+            }}
+          />
+
+          {showRating && (
+            <div style={{ position: "relative", zIndex: 1 }}>
+              {renderStars(rating, ratingColor)}
+            </div>
+          )}
+
+          <p
+            style={{
+              margin: 0,
+              fontSize: testimonialSize,
+              color: textColor,
+              fontFamily,
+              fontWeight,
+              lineHeight,
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            {testimonialText}
+          </p>
+
+          <div style={{ position: "relative", zIndex: 1, marginTop: "8px" }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: authorNameSize,
+                color: textColor,
+                fontWeight: "700",
+                fontFamily,
+              }}
+            >
+              {authorName}
+            </p>
+            <p
+              style={{
+                margin: "2px 0 0 0",
+                fontSize: authorTitleSize,
+                color: accentColor,
+                fontWeight: "600",
+                fontFamily,
+              }}
+            >
+              {authorTitle}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Compact Layout (Side-by-side)
+  return (
+    <div
+      ref={(ref: HTMLDivElement | null) => {
+        if (ref) connect(drag(ref));
+      }}
+      style={{
+        ...containerStyle,
+        backgroundColor,
+        padding,
+      }}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+    >
+      <div
+        style={{
+          display: "flex",
+          gap: "16px",
+          alignItems: "flex-start",
+          padding,
+          backgroundColor: cardBgColor,
+          borderRadius,
+          border: `${borderWidth} solid ${borderColor}`,
+          boxShadow: isHovering ? shadowMap.heavy : shadowMap[shadowLevel],
+          transition: "all 0.3s ease",
+          ...getAnimationStyle(),
+        }}
+      >
+        {showAuthorAvatar && (
+          <img
+            src={authorAvatar}
+            alt={authorName}
+            style={{
+              width: "64px",
+              height: "64px",
+              borderRadius: avatarShape === "circle" ? "50%" : "8px",
+              objectFit: "cover",
+              border: `2px solid ${accentColor}`,
+              flexShrink: 0,
+            }}
+          />
+        )}
+        <div style={{ flex: 1 }}>
+          {showRating && (
+            <div style={{ marginBottom: "6px" }}>
+              {renderStars(rating, ratingColor)}
+            </div>
+          )}
+          <p
+            style={{
+              margin: "0 0 8px 0",
+              fontSize: testimonialSize,
+              color: textColor,
+              fontFamily,
+              fontWeight,
+              lineHeight,
+            }}
+          >
+            {testimonialText}
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: authorNameSize,
+              color: textColor,
+              fontWeight: "700",
+              fontFamily,
+            }}
+          >
+            {authorName}
+          </p>
+          <p
+            style={{
+              margin: "2px 0 0 0",
+              fontSize: authorTitleSize,
+              color: authorTextColor,
+              fontFamily,
+            }}
+          >
+            {authorTitle}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TestimonialSettings = () => {
+  const {
+    actions: { setProp },
+    props,
+  } = useNode((node) => ({ props: node.data.props as TestimonialProps }));
+
+  return (
+    <div className="p-4 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+      <LayoutSettings />
+
+      {/* CONTENT SECTION */}
+      <div className="border-t pt-3 space-y-3">
+        <label className="block text-xs font-semibold text-gray-700 bg-blue-50 px-2 py-1 rounded">
+          Content
+        </label>
+        
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Testimonial Text</label>
+          <textarea
+            value={props.testimonialText ?? ""}
+            onChange={(e) => setProp((p: TestimonialProps) => (p.testimonialText = e.target.value))}
+            rows={4}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="What does your customer say?"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Author Name</label>
+            <input
+              value={props.authorName ?? ""}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.authorName = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="John Doe"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Rating (1-5)</label>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={props.rating ?? 5}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.rating = Number(e.target.value)))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Title/Position</label>
+            <input
+              value={props.authorTitle ?? ""}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.authorTitle = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="CEO"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Company/Org</label>
+            <input
+              value={props.authorCompany ?? ""}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.authorCompany = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="Company Name"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Author Avatar URL</label>
+          <input
+            value={props.authorAvatar ?? ""}
+            onChange={(e) => setProp((p: TestimonialProps) => (p.authorAvatar = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="https://..."
+          />
+        </div>
+      </div>
+
+      {/* LAYOUT & DISPLAY SECTION */}
+      <div className="border-t pt-3 space-y-3">
+        <label className="block text-xs font-semibold text-gray-700 bg-green-50 px-2 py-1 rounded">
+          Layout & Display
+        </label>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Layout Style</label>
+          <select
+            value={props.layout ?? "card"}
+            onChange={(e) => setProp((p: TestimonialProps) => (p.layout = e.target.value as any))}
+            className="w-full px-3 py-2 border rounded text-sm"
+          >
+            <option value="card">Card (Full Featured)</option>
+            <option value="minimal">Minimal (Left Border)</option>
+            <option value="highlighted">Highlighted (Featured)</option>
+            <option value="compact">Compact (Side Avatar)</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-2">
+            <input
+              id="testimonial-rating"
+              type="checkbox"
+              checked={Boolean(props.showRating ?? true)}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.showRating = e.target.checked))}
+            />
+            <label htmlFor="testimonial-rating" className="text-sm text-gray-700">Show Rating</label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="testimonial-quote"
+              type="checkbox"
+              checked={Boolean(props.showQuoteIcon ?? true)}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.showQuoteIcon = e.target.checked))}
+            />
+            <label htmlFor="testimonial-quote" className="text-sm text-gray-700">Quote Icon</label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="testimonial-avatar"
+              type="checkbox"
+              checked={Boolean(props.showAuthorAvatar ?? true)}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.showAuthorAvatar = e.target.checked))}
+            />
+            <label htmlFor="testimonial-avatar" className="text-sm text-gray-700">Show Avatar</label>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Avatar Size</label>
+            <input
+              value={props.avatarSize ?? "48px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.avatarSize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="48px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Avatar Shape</label>
+            <select
+              value={props.avatarShape ?? "circle"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.avatarShape = e.target.value as any))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="circle">Circle</option>
+              <option value="rounded">Rounded</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* STYLING SECTION */}
+      <div className="border-t pt-3 space-y-3">
+        <label className="block text-xs font-semibold text-gray-700 bg-purple-50 px-2 py-1 rounded">
+          Styling
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Background</label>
+            <input
+              type="color"
+              value={props.backgroundColor ?? "#ffffff"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.backgroundColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Card Background</label>
+            <input
+              type="color"
+              value={props.cardBgColor ?? "#f8fafc"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.cardBgColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Text Color</label>
+            <input
+              type="color"
+              value={props.textColor ?? "#1e293b"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.textColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Accent Color</label>
+            <input
+              type="color"
+              value={props.accentColor ?? "#3b82f6"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.accentColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Border Color</label>
+            <input
+              type="color"
+              value={props.borderColor ?? "#e2e8f0"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.borderColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Rating Color</label>
+            <input
+              type="color"
+              value={props.ratingColor ?? "#fbbf24"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.ratingColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Border Radius</label>
+            <input
+              value={props.borderRadius ?? "12px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.borderRadius = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="12px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Shadow</label>
+            <select
+              value={props.shadowLevel ?? "medium"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.shadowLevel = e.target.value as any))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="none">None</option>
+              <option value="light">Light</option>
+              <option value="medium">Medium</option>
+              <option value="heavy">Heavy</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Padding</label>
+            <input
+              value={props.padding ?? "24px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.padding = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="24px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Gap</label>
+            <input
+              value={props.gap ?? "12px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.gap = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="12px"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* TYPOGRAPHY SECTION */}
+      <div className="border-t pt-3 space-y-3">
+        <label className="block text-xs font-semibold text-gray-700 bg-orange-50 px-2 py-1 rounded">
+          Typography
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Testimonial Size</label>
+            <input
+              value={props.testimonialSize ?? "16px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.testimonialSize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="16px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Author Name Size</label>
+            <input
+              value={props.authorNameSize ?? "15px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.authorNameSize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="15px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Title Size</label>
+            <input
+              value={props.authorTitleSize ?? "13px"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.authorTitleSize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="13px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Line Height</label>
+            <input
+              value={props.lineHeight ?? "1.6"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.lineHeight = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="1.6"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ANIMATION SECTION */}
+      <div className="border-t pt-3 space-y-3">
+        <label className="block text-xs font-semibold text-gray-700 bg-pink-50 px-2 py-1 rounded">
+          Animation & Hover
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Hover Effect</label>
+            <select
+              value={props.hoverEffect ?? "lift"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.hoverEffect = e.target.value as any))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="none">None</option>
+              <option value="lift">Lift Up</option>
+              <option value="glow">Glow</option>
+              <option value="shadow">Shadow</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Animation</label>
+            <select
+              value={props.animationType ?? "fadeIn"}
+              onChange={(e) => setProp((p: TestimonialProps) => (p.animationType = e.target.value as any))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="none">None</option>
+              <option value="fadeIn">Fade In</option>
+              <option value="slideIn">Slide In</option>
+              <option value="scaleIn">Scale In</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Animation Duration</label>
+          <input
+            value={props.animationDuration ?? "0.6s"}
+            onChange={(e) => setProp((p: TestimonialProps) => (p.animationDuration = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="0.6s"
+          />
+        </div>
+      </div>
+
+      <BaseSettings />
+    </div>
+  );
+};
+
+(Testimonial as any).craft = {
+  displayName: "Testimonial",
+  props: {
+    // Universal Layout
+    position: "static",
+    top: "0",
+    right: "auto",
+    bottom: "auto",
+    left: "auto",
+    zIndex: 10,
+    width: "100%",
+    height: "auto",
+    minWidth: "auto",
+    maxWidth: "100%",
+    minHeight: "auto",
+    maxHeight: "auto",
+    margin: "0",
+    marginTop: "0",
+    marginRight: "0",
+    marginBottom: "0",
+    marginLeft: "0",
+    // Content
+    testimonialText: "This experience was transformative. The team went above and beyond to ensure success. I highly recommend their services to anyone looking for excellence.",
+    authorName: "Sarah Johnson",
+    authorTitle: "Student",
+    authorCompany: "Class of 2026",
+    authorAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
+    // Rating
+    rating: 5,
+    showRating: true,
+    // Layout
+    layout: "card",
+    showQuoteIcon: true,
+    showAuthorAvatar: true,
+    avatarSize: "48px",
+    avatarShape: "circle",
+    // Styling
+    backgroundColor: "#ffffff",
+    cardBgColor: "#f8fafc",
+    textColor: "#1e293b",
+    authorTextColor: "#64748b",
+    ratingColor: "#fbbf24",
+    accentColor: "#3b82f6",
+    borderColor: "#e2e8f0",
+    borderWidth: "1px",
+    borderRadius: "12px",
+    shadowLevel: "medium",
+    padding: "24px",
+    gap: "12px",
+    // Typography
+    testimonialSize: "16px",
+    authorNameSize: "15px",
+    authorTitleSize: "13px",
+    fontFamily: "inherit",
+    fontWeight: "500",
+    lineHeight: "1.6",
+    // Hover & Animation
+    hoverEffect: "lift",
+    animationType: "fadeIn",
+    animationDuration: "0.6s",
+    // Responsive
+    maxWidth: "500px",
+  },
+  related: {
+    toolbar: () => <TestimonialSettings />,
+  },
+};
 
 export const Timeline = ({
+  // Universal Layout Properties
+  position = "static",
+  top = "0",
+  right = "auto",
+  bottom = "auto",
+  left = "auto",
+  zIndex = 10,
+  width = "100%",
+  height = "auto",
+  minWidth = "auto",
+  maxWidth = "100%",
+  minHeight = "auto",
+  maxHeight = "auto",
+  margin = "0",
+  marginTop = "0",
+  marginRight = "0",
+  marginBottom = "0",
+  marginLeft = "0",
+  // Component Content
   title = "Journey Timeline",
   subtitle = "Milestones",
   items = "Application Opens\nEntrance Assessment\nCounseling Session\nOrientation Day",
@@ -1333,21 +2684,45 @@ export const Timeline = ({
   buttonColor = "#0f766e",
   buttonTextColor = "#ffffff",
   buttonHoverColor = "#115e59",
+  itemLayout = "list",
+  itemColumns = 1,
+  tabletItemColumns = 1,
+  mobileItemColumns = 1,
 }: BaseProps) => {
   const {
     connectors: { connect, drag },
   } = useNode();
   const [buttonHover, setButtonHover] = React.useState(false);
-  const timelineBackground =
-    "linear-gradient(140deg, #f8fafc 0%, #ecfeff 42%, #e0f2fe 100%)";
-  const timelineBorderColor = "rgba(56, 189, 248, 0.28)";
-  const timelineBorderRadius = "30px";
-  const timelineBoxShadow = "0 30px 70px rgba(14, 116, 144, 0.18)";
-  const timelineTextColor = "#082f49";
-  const timelineTitleColor = "#0c4a6e";
-  const timelineSubtitleColor = "#0e7490";
-  const timelineBodyTextColor = "#164e63";
+  const [windowWidth, setWindowWidth] = React.useState(typeof window !== "undefined" ? window.innerWidth : 1024);
+
+  React.useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Use props instead of hardcoded values
+  const timelineBackground = backgroundColor || "#ecfeff";
+  const timelineBorderColor = borderColor || "rgba(56, 189, 248, 0.28)";
+  const timelineBorderRadius = borderRadius || "30px";
+  const timelineBoxShadow = boxShadow || "0 30px 70px rgba(14, 116, 144, 0.18)";
+  const timelineTextColor = textColor || "#082f49";
+  const timelineTitleColor = titleColor || "#0c4a6e";
+  const timelineSubtitleColor = subtitleColor || "#0e7490";
+  const timelineBodyTextColor = bodyTextColor || "#164e63";
   const timelineItems = splitItems(items);
+  const isGridLayout = itemLayout === "grid";
+  const actualItemColumns = itemColumns || 1;
+  const actualTabletColumns = tabletItemColumns || 1;
+  const actualMobileColumns = mobileItemColumns || 1;
+
+  // Determine responsive columns
+  let displayColumns = actualItemColumns;
+  if (windowWidth < 640) {
+    displayColumns = actualMobileColumns;
+  } else if (windowWidth < 1024) {
+    displayColumns = actualTabletColumns;
+  }
 
   const handleActionClick = () => {
     if (!ctaUrl || ctaUrl === "#") return;
@@ -1364,6 +2739,22 @@ export const Timeline = ({
         if (ref) connect(drag(ref));
       }}
       style={{
+        // Universal Layout Properties
+        position: position as any,
+        top: position !== "static" ? top : "auto",
+        right: position !== "static" ? right : "auto",
+        bottom: position !== "static" ? bottom : "auto",
+        left: position !== "static" ? left : "auto",
+        zIndex: position !== "static" ? zIndex : "auto",
+        width: width || "100%",
+        height: height || "auto",
+        minWidth: minWidth || "auto",
+        maxWidth: maxWidth || "100%",
+        minHeight: minHeight || "auto",
+        maxHeight: maxHeight || "auto",
+        margin: margin || `${marginTop || "0"} ${marginRight || "0"} ${marginBottom || "0"} ${marginLeft || "0"}`,
+        boxSizing: "border-box",
+        // Component Styles
         background: timelineBackground,
         border: `1px solid ${timelineBorderColor}`,
         borderRadius: timelineBorderRadius,
@@ -1375,7 +2766,6 @@ export const Timeline = ({
         display: "flex",
         flexDirection: "column",
         gap,
-        position: "relative",
         overflow: "hidden",
       }}
     >
@@ -1439,15 +2829,47 @@ export const Timeline = ({
         {title}
       </h3>
 
-      <ol
-        style={{
-          margin: 0,
-          padding: 0,
-          listStyle: "none",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
+      {isGridLayout ? (
+        // GRID LAYOUT
+        <div
+          style={{
+            margin: 0,
+            padding: 0,
+            display: "grid",
+            gridTemplateColumns: `repeat(${displayColumns}, 1fr)`,
+            gap: gap || "16px",
+            position: "relative",
+          }}
+        >
+          {timelineItems.map((item, idx) => (
+            <div
+              key={`timeline-grid-item-${idx}`}
+              style={{
+                borderRadius: "16px",
+                border: `1px solid ${timelineBorderColor}`,
+                background: "linear-gradient(150deg, rgba(255,255,255,0.94), rgba(240,249,255,0.78))",
+                padding: "14px 16px",
+                color: timelineBodyTextColor,
+                fontSize: bodySize,
+                lineHeight: 1.6,
+                boxShadow: "0 14px 24px rgba(15,23,42,0.08)",
+              }}
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      ) : (
+        // TIMELINE LIST LAYOUT
+        <ol
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+          }}
       >
         {timelineItems.map((item, idx) => {
           const isLast = idx === timelineItems.length - 1;
@@ -1520,7 +2942,8 @@ export const Timeline = ({
             </li>
           );
         })}
-      </ol>
+        </ol>
+      )}
 
       {showCta ? (
         <div style={{ marginTop: "6px" }}>
@@ -1551,6 +2974,29 @@ export const Timeline = ({
 (Timeline as any).craft = {
   displayName: "Timeline",
   props: {
+    // Layout & Positioning
+    position: "static",
+    top: "0",
+    right: "auto",
+    bottom: "auto",
+    left: "auto",
+    zIndex: 10,
+    width: "100%",
+    height: "auto",
+    minWidth: "auto",
+    maxWidth: "100%",
+    minHeight: "auto",
+    maxHeight: "auto",
+    margin: "0",
+    marginTop: "0",
+    marginRight: "0",
+    marginBottom: "0",
+    marginLeft: "0",
+    paddingTop: "0",
+    paddingRight: "0",
+    paddingBottom: "0",
+    paddingLeft: "0",
+    // Component Content
     title: "Journey Timeline",
     subtitle: "Milestones",
     items:
@@ -1577,13 +3023,818 @@ export const Timeline = ({
     buttonColor: "#0f766e",
     buttonTextColor: "#ffffff",
     buttonHoverColor: "#115e59",
+    itemLayout: "list",
+    itemColumns: 1,
+    tabletItemColumns: 1,
+    mobileItemColumns: 1,
   },
   related: {
     toolbar: () => <BaseSettings showItems={true} />,
   },
 };
 
+const BadgeSettings = () => {
+  const {
+    actions: { setProp },
+    props,
+  } = useNode((node) => ({ props: node.data.props as BaseProps }));
+
+  return (
+    <div className="p-4 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+      {/* CONTENT SECTION */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Title</label>
+          <input
+            value={props.title ?? ""}
+            onChange={(e) => setProp((p: BaseProps) => (p.title = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="Badge title"
+            />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Subtitle</label>
+          <input
+            value={props.subtitle ?? ""}
+            onChange={(e) => setProp((p: BaseProps) => (p.subtitle = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="Badge subtitle"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description</label>
+        <textarea
+          value={props.description ?? ""}
+          onChange={(e) => setProp((p: BaseProps) => (p.description = e.target.value))}
+          className="w-full px-3 py-2 border rounded text-sm"
+          rows={2}
+          placeholder="Badge description"
+        />
+      </div>
+
+      {/* SIZE & LAYOUT */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">SIZE & LAYOUT</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Badge Size</label>
+            <select
+              value={props.badgeSize ?? "medium"}
+              onChange={(e) =>
+                setProp((p: BaseProps) => (p.badgeSize = e.target.value as BaseProps["badgeSize"]))
+              }
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="small">Small (240px)</option>
+              <option value="medium">Medium (300px)</option>
+              <option value="large">Large (380px)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Alignment</label>
+            <select
+              value={props.badgeAlignment ?? "left"}
+              onChange={(e) =>
+                setProp((p: BaseProps) => (p.badgeAlignment = e.target.value as BaseProps["badgeAlignment"]))
+              }
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Width</label>
+            <input
+              value={props.badgeWidth ?? "300px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeWidth = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="300px"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Height</label>
+            <input
+              value={props.badgeHeight ?? "auto"}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeHeight = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="auto"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Max Width</label>
+            <input
+              value={props.maxWidth ?? "100%"}
+              onChange={(e) => setProp((p: BaseProps) => (p.maxWidth = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="100%"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Min Width</label>
+            <input
+              value={props.minWidth ?? "240px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.minWidth = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="240px"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* POSITIONING */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">POSITIONING</h4>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Position Type</label>
+          <select
+            value={props.badgePosition ?? "static"}
+            onChange={(e) =>
+              setProp((p: BaseProps) => (p.badgePosition = e.target.value as BaseProps["badgePosition"]))
+            }
+            className="w-full px-3 py-2 border rounded text-sm"
+          >
+            <option value="static">Static (Normal)</option>
+            <option value="relative">Relative</option>
+            <option value="absolute">Absolute</option>
+            <option value="fixed">Fixed</option>
+          </select>
+        </div>
+
+        {props.badgePosition !== "static" && (
+          <>
+            <div className="grid grid-cols-4 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Top</label>
+                <input
+                  value={props.badgeTop ?? "0"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.badgeTop = e.target.value))}
+                  className="w-full px-2 py-1 border rounded text-xs"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Right</label>
+                <input
+                  value={props.badgeRight ?? "0"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.badgeRight = e.target.value))}
+                  className="w-full px-2 py-1 border rounded text-xs"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Bottom</label>
+                <input
+                  value={props.badgeBottom ?? "auto"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.badgeBottom = e.target.value))}
+                  className="w-full px-2 py-1 border rounded text-xs"
+                  placeholder="auto"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Left</label>
+                <input
+                  value={props.badgeLeft ?? "auto"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.badgeLeft = e.target.value))}
+                  className="w-full px-2 py-1 border rounded text-xs"
+                  placeholder="auto"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Z-Index ({props.badgeZIndex ?? 10})</label>
+              <input
+                type="range"
+                min="0"
+                max="1000"
+                step="10"
+                value={props.badgeZIndex ?? 10}
+                onChange={(e) => setProp((p: BaseProps) => (p.badgeZIndex = Number(e.target.value)))}
+                className="w-full"
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* SPACING & MARGINS */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">SPACING & MARGINS</h4>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Padding</label>
+          <input
+            value={props.padding ?? "16px"}
+            onChange={(e) => setProp((p: BaseProps) => (p.padding = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="16px"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Gap</label>
+          <input
+            value={props.gap ?? "6px"}
+            onChange={(e) => setProp((p: BaseProps) => (p.gap = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="6px"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Margin (All)</label>
+          <input
+            value={props.badgeMargin ?? "0"}
+            onChange={(e) => setProp((p: BaseProps) => (p.badgeMargin = e.target.value))}
+            className="w-full px-3 py-2 border rounded text-sm"
+            placeholder="0"
+          />
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">M-Top</label>
+            <input
+              value={props.badgeMarginTop ?? "0"}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeMarginTop = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">M-Right</label>
+            <input
+              value={props.badgeMarginRight ?? "0"}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeMarginRight = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">M-Bottom</label>
+            <input
+              value={props.badgeMarginBottom ?? "0"}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeMarginBottom = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">M-Left</label>
+            <input
+              value={props.badgeMarginLeft ?? "0"}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeMarginLeft = e.target.value))}
+              className="w-full px-2 py-1 border rounded text-xs"
+              placeholder="0"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ICON SETTINGS */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">ICON SETTINGS</h4>
+        <div className="flex items-center gap-2">
+          <input
+            id="show-icon"
+            type="checkbox"
+            checked={Boolean(props.showIcon)}
+            onChange={(e) => setProp((p: BaseProps) => (p.showIcon = e.target.checked))}
+          />
+          <label htmlFor="show-icon" className="text-sm text-gray-700">Show Icon</label>
+        </div>
+
+        {props.showIcon && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Icon</label>
+                <input
+                  value={props.iconEmoji ?? "★"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.iconEmoji = e.target.value))}
+                  className="w-full px-3 py-2 border rounded text-sm text-center text-lg"
+                  placeholder="★"
+                  maxLength={3}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Icon Size</label>
+                <input
+                  value={props.iconSize ?? "28px"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.iconSize = e.target.value))}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="28px"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Icon Style</label>
+                <select
+                  value={props.iconStyle ?? "circle"}
+                  onChange={(e) =>
+                    setProp((p: BaseProps) => (p.iconStyle = e.target.value as BaseProps["iconStyle"]))
+                  }
+                  className="w-full px-3 py-2 border rounded text-sm"
+                >
+                  <option value="circle">Circle</option>
+                  <option value="square">Square</option>
+                  <option value="rounded">Rounded Square</option>
+                  <option value="none">No Background</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Position</label>
+                <select
+                  value={props.iconPosition ?? "inline-title"}
+                  onChange={(e) =>
+                    setProp((p: BaseProps) => (p.iconPosition = e.target.value as BaseProps["iconPosition"]))
+                  }
+                  className="w-full px-3 py-2 border rounded text-sm"
+                >
+                  <option value="inline-title">With Title</option>
+                  <option value="top-left">Top Left</option>
+                  <option value="top-center">Top Center</option>
+                  <option value="top-right">Top Right</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Icon Background</label>
+                <input
+                  type="color"
+                  value={props.iconBgColor ?? "#f97316"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.iconBgColor = e.target.value))}
+                  className="w-full h-10 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Icon Color</label>
+                <input
+                  type="color"
+                  value={props.iconColor ?? "#ffffff"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.iconColor = e.target.value))}
+                  className="w-full h-10 border rounded"
+                />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* COLORS */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">COLORS</h4>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Background</label>
+            <input
+              type="color"
+              value={props.backgroundColor ?? "#fef3c7"}
+              onChange={(e) => setProp((p: BaseProps) => (p.backgroundColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Title</label>
+            <input
+              type="color"
+              value={props.titleColor ?? "#7c2d12"}
+              onChange={(e) => setProp((p: BaseProps) => (p.titleColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Subtitle</label>
+            <input
+              type="color"
+              value={props.subtitleColor ?? "#9a3412"}
+              onChange={(e) => setProp((p: BaseProps) => (p.subtitleColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Body Text</label>
+            <input
+              type="color"
+              value={props.bodyTextColor ?? "#92400e"}
+              onChange={(e) => setProp((p: BaseProps) => (p.bodyTextColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Border</label>
+            <input
+              type="color"
+              value={props.borderColor ?? "rgba(251,146,60,0.45)"}
+              onChange={(e) => setProp((p: BaseProps) => (p.borderColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* TYPOGRAPHY */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">TYPOGRAPHY</h4>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Title Size</label>
+            <input
+              value={props.titleSize ?? "20px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.titleSize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Subtitle Size</label>
+            <input
+              value={props.subtitleSize ?? "11px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.subtitleSize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Body Size</label>
+            <input
+              value={props.bodySize ?? "13px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.bodySize = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Font Family</label>
+            <select
+              value={props.fontFamily ?? "inherit"}
+              onChange={(e) => setProp((p: BaseProps) => (p.fontFamily = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              {FONT_FAMILY_OPTIONS.map((font) => (
+                <option key={font} value={font}>{font}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Text Style</label>
+            <select
+              value={props.textStyle ?? "normal"}
+              onChange={(e) => setProp((p: BaseProps) => (p.textStyle = e.target.value as BaseProps["textStyle"]))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="normal">Normal</option>
+              <option value="italic">Italic</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* BORDERS & SHADOWS */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">BORDERS & SHADOWS</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Border Radius</label>
+            <input
+              value={props.borderRadius ?? "999px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.borderRadius = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Border Width</label>
+            <input
+              value={props.borderWidth ?? "1px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.borderWidth = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Border Style</label>
+          <select
+            value={props.borderStyle ?? "solid"}
+            onChange={(e) =>
+              setProp((p: BaseProps) => (p.borderStyle = e.target.value as BaseProps["borderStyle"]))
+            }
+            className="w-full px-3 py-2 border rounded text-sm"
+          >
+            <option value="solid">Solid</option>
+            <option value="dashed">Dashed</option>
+            <option value="dotted">Dotted</option>
+            <option value="double">Double</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Shadow Color</label>
+            <input
+              type="color"
+              value={props.shadowColor ?? "rgba(217,119,6,0.2)"}
+              onChange={(e) => setProp((p: BaseProps) => (p.shadowColor = e.target.value))}
+              className="w-full h-10 border rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Shadow Blur</label>
+            <input
+              value={props.shadowBlur ?? "40px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.shadowBlur = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Shadow Spread</label>
+            <input
+              value={props.shadowSpread ?? "0px"}
+              onChange={(e) => setProp((p: BaseProps) => (p.shadowSpread = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Shadow Opacity ({Math.round((props.shadowOpacity ?? 1) * 100)}%)</label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={props.shadowOpacity ?? 1}
+            onChange={(e) => setProp((p: BaseProps) => (p.shadowOpacity = Number(e.target.value)))}
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      {/* TRANSFORM & ANIMATION */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">TRANSFORM & ANIMATION</h4>
+        
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Rotate ({props.badgeRotate ?? 0}°)</label>
+            <input
+              type="range"
+              min="-360"
+              max="360"
+              step="5"
+              value={props.badgeRotate ?? 0}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeRotate = Number(e.target.value)))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Scale ({props.badgeScale ?? 1}x)</label>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value={props.badgeScale ?? 1}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeScale = Number(e.target.value)))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Opacity ({Math.round((props.badgeOpacity ?? 1) * 100)}%)</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={props.badgeOpacity ?? 1}
+              onChange={(e) => setProp((p: BaseProps) => (p.badgeOpacity = Number(e.target.value)))}
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Animation</label>
+          <select
+            value={props.badgeAnimation ?? "none"}
+            onChange={(e) =>
+              setProp((p: BaseProps) => (p.badgeAnimation = e.target.value as BaseProps["badgeAnimation"]))
+            }
+            className="w-full px-3 py-2 border rounded text-sm"
+          >
+            <option value="none">No Animation</option>
+            <option value="pulse">Pulse</option>
+            <option value="bounce">Bounce</option>
+            <option value="float">Float Up</option>
+            <option value="float-reverse">Float Down</option>
+            <option value="glow">Glow</option>
+          </select>
+        </div>
+
+        {props.badgeAnimation !== "none" && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Duration</label>
+                <input
+                  value={props.badgeAnimationDuration ?? "2s"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.badgeAnimationDuration = e.target.value))}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="2s"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Delay</label>
+                <input
+                  value={props.badgeAnimationDelay ?? "0s"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.badgeAnimationDelay = e.target.value))}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="0s"
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="border-t pt-2 space-y-2">
+          <h5 className="text-xs font-semibold text-gray-700">HOVER EFFECTS</h5>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Rotate on Hover ({props.badgeRotateOnHover ?? 0}°)</label>
+              <input
+                type="range"
+                min="-180"
+                max="180"
+                step="5"
+                value={props.badgeRotateOnHover ?? 0}
+                onChange={(e) => setProp((p: BaseProps) => (p.badgeRotateOnHover = Number(e.target.value)))}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Scale on Hover ({props.badgeScaleOnHover ?? 1}x)</label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={props.badgeScaleOnHover ?? 1}
+                onChange={(e) => setProp((p: BaseProps) => (p.badgeScaleOnHover = Number(e.target.value)))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* COUNT BADGE */}
+      <div className="border-t pt-3 space-y-3">
+        <h4 className="font-semibold text-xs text-gray-700">COUNT BADGE</h4>
+        <div className="flex items-center gap-2">
+          <input
+            id="count-badge"
+            type="checkbox"
+            checked={Boolean(props.countBadge)}
+            onChange={(e) => setProp((p: BaseProps) => (p.countBadge = e.target.checked))}
+          />
+          <label htmlFor="count-badge" className="text-sm text-gray-700">Show Count Badge</label>
+        </div>
+
+        {props.countBadge && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Count Number</label>
+                <input
+                  value={props.countNumber ?? "5"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.countNumber = e.target.value))}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="5"
+                />
+              </div>
+              <div></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Count Background</label>
+                <input
+                  type="color"
+                  value={props.countBgColor ?? "#ef4444"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.countBgColor = e.target.value))}
+                  className="w-full h-10 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Count Text</label>
+                <input
+                  type="color"
+                  value={props.countTextColor ?? "#ffffff"}
+                  onChange={(e) => setProp((p: BaseProps) => (p.countTextColor = e.target.value))}
+                  className="w-full h-10 border rounded"
+                />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* CTA BUTTON */}
+      <div className="border-t pt-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <input
+            id="show-cta"
+            type="checkbox"
+            checked={Boolean(props.showCta)}
+            onChange={(e) => setProp((p: BaseProps) => (p.showCta = e.target.checked))}
+          />
+          <label htmlFor="show-cta" className="text-sm text-gray-700">Show Action Button</label>
+        </div>
+        {props.showCta && (
+          <>
+            <input
+              value={props.ctaText ?? "View"}
+              onChange={(e) => setProp((p: BaseProps) => (p.ctaText = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="Button text"
+            />
+            <input
+              value={props.ctaUrl ?? "#"}
+              onChange={(e) => setProp((p: BaseProps) => (p.ctaUrl = e.target.value))}
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="Button URL"
+            />
+            <select
+              value={props.ctaTarget ?? "same"}
+              onChange={(e) =>
+                setProp((p: BaseProps) => (p.ctaTarget = e.target.value as BaseProps["ctaTarget"]))
+              }
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="same">Open in same tab</option>
+              <option value="new">Open in new tab</option>
+            </select>
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                type="color"
+                value={props.buttonColor ?? "#9a3412"}
+                onChange={(e) => setProp((p: BaseProps) => (p.buttonColor = e.target.value))}
+                className="w-full h-10 border rounded"
+              />
+              <input
+                type="color"
+                value={props.buttonTextColor ?? "#ffffff"}
+                onChange={(e) => setProp((p: BaseProps) => (p.buttonTextColor = e.target.value))}
+                className="w-full h-10 border rounded"
+              />
+              <input
+                type="color"
+                value={props.buttonHoverColor ?? "#7c2d12"}
+                onChange={(e) => setProp((p: BaseProps) => (p.buttonHoverColor = e.target.value))}
+                className="w-full h-10 border rounded"
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const Badge = ({
+  // Universal Layout Properties
+  position = "static",
+  top = "0",
+  right = "auto",
+  bottom = "auto",
+  left = "auto",
+  zIndex = 10,
+  width = "100%",
+  height = "auto",
+  minWidth = "240px",
+  maxWidth = "100%",
+  minHeight = "auto",
+  maxHeight = "auto",
+  margin = "0",
+  marginTop = "0",
+  marginRight = "0",
+  marginBottom = "0",
+  marginLeft = "0",
+  // Badge Content
   title = "Top Ranked",
   subtitle = "Achievement",
   description = "#1 in Academic Excellence 2026",
@@ -1600,6 +3851,7 @@ export const Badge = ({
   borderRadius = "999px",
   borderColor = "rgba(251,146,60,0.45)",
   padding = "16px",
+  gap = "6px",
   boxShadow = "0 20px 40px rgba(217,119,6,0.2)",
   showCta = false,
   ctaText = "View",
@@ -1608,11 +3860,151 @@ export const Badge = ({
   buttonColor = "#9a3412",
   buttonTextColor = "#ffffff",
   buttonHoverColor = "#7c2d12",
+  badgeSize = "medium",
+  badgeWidth = "300px",
+  badgeHeight = "auto",
+  badgeAlignment = "left",
+  iconBgColor = "#f97316",
+  iconStyle = "circle",
+  showIcon = true,
+  iconEmoji = "★",
+  iconSize = "28px",
+  iconColor = "#ffffff",
+  iconPosition = "inline-title",
+  // Positioning options
+  badgePosition = "static",
+  badgeTop = "0",
+  badgeRight = "0",
+  badgeBottom = "auto",
+  badgeLeft = "auto",
+  badgeZIndex = 10,
+  // Spacing options
+  badgeMargin = "0",
+  badgeMarginTop = "0",
+  badgeMarginRight = "0",
+  badgeMarginBottom = "0",
+  badgeMarginLeft = "0",
+  // Transform & Animation
+  badgeTransform = "none",
+  badgeRotate = 0,
+  badgeScale = 1,
+  badgeOpacity = 1,
+  badgeAnimation = "none",
+  badgeAnimationDuration = "2s",
+  badgeAnimationDelay = "0s",
+  // Border options
+  borderWidth = "1px",
+  borderStyle = "solid",
+  // Advanced options
+  badgeRotateOnHover = 0,
+  badgeScaleOnHover = 1,
+  shadowColor = "rgba(217,119,6,0.2)",
+  shadowBlur = "40px",
+  shadowSpread = "0px",
+  shadowOpacity = 1,
+  backgroundGradient = "none",
+  countBadge = false,
+  countNumber = "5",
+  countBgColor = "#ef4444",
+  countTextColor = "#ffffff",
 }: BaseProps) => {
   const {
     connectors: { connect, drag },
   } = useNode();
   const [buttonHover, setButtonHover] = React.useState(false);
+  const [badgeHover, setBadgeHover] = React.useState(false);
+
+  // Animation keyframes
+  const getAnimationKeyframes = () => {
+    switch (badgeAnimation) {
+      case "pulse":
+        return `@keyframes badgePulse { 0%, 100% { opacity: ${badgeOpacity}; } 50% { opacity: ${badgeOpacity * 0.5}; } }`;
+      case "bounce":
+        return `@keyframes badgeBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }`;
+      case "float":
+        return `@keyframes badgeFloat { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-15px); } }`;
+      case "float-reverse":
+        return `@keyframes badgeFloatReverse { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(15px); } }`;
+      case "glow":
+        return `@keyframes badgeGlow { 0%, 100% { filter: drop-shadow(0 0 5px ${iconBgColor}); } 50% { filter: drop-shadow(0 0 15px ${iconBgColor}); } }`;
+      default:
+        return "";
+    }
+  };
+
+  // Calculate animation string
+  const getAnimationString = () => {
+    if (badgeAnimation === "none") return "none";
+    return `${badgeAnimation} ${badgeAnimationDuration} ease-in-out ${badgeAnimationDelay} infinite`;
+  };
+
+  // Calculate transform
+  const getTransform = () => {
+    let transforms = [];
+    if (badgeRotate !== 0) transforms.push(`rotate(${badgeRotate}deg)`);
+    if (badgeScale !== 1) transforms.push(`scale(${badgeScale})`);
+    if (badgeTransform !== "none" && badgeTransform) transforms.push(badgeTransform);
+    return transforms.length > 0 ? transforms.join(" ") : "none";
+  };
+
+  // Calculate hover transform
+  const getHoverTransform = () => {
+    let transforms = [];
+    if (badgeRotateOnHover !== 0) transforms.push(`rotate(${badgeRotate + badgeRotateOnHover}deg)`);
+    if (badgeScaleOnHover !== 1) transforms.push(`scale(${badgeScale * badgeScaleOnHover})`);
+    return transforms.length > 0 ? transforms.join(" ") : getTransform();
+  };
+
+  // Calculate margin
+  const calculateMargin = () => {
+    if (badgeMargin && badgeMargin !== "0") return badgeMargin;
+    return `${badgeMarginTop || "0"} ${badgeMarginRight || "0"} ${badgeMarginBottom || "0"} ${badgeMarginLeft || "0"}`;
+  };
+
+  // Calculate shadow
+  const calculateBoxShadow = () => {
+    if (boxShadow && boxShadow !== "none") return boxShadow;
+    return `${shadowBlur} ${shadowSpread} ${shadowColor}`;
+  };
+
+  // Calculate background
+  const calculateBackground = () => {
+    if (backgroundGradient && backgroundGradient !== "none") return backgroundGradient;
+    return backgroundColor;
+  };
+
+  let actualWidth: string;
+  switch (badgeSize) {
+    case "small":
+      actualWidth = "240px";
+      break;
+    case "medium":
+      actualWidth = "300px";
+      break;
+    case "large":
+      actualWidth = "380px";
+      break;
+    case "custom":
+    default:
+      actualWidth = badgeWidth || "300px";
+      break;
+  }
+
+  // Get icon background style
+  const getIconBackgroundStyle = () => {
+    switch (iconStyle) {
+      case "circle":
+        return { borderRadius: "999px" };
+      case "square":
+        return { borderRadius: "0px" };
+      case "rounded":
+        return { borderRadius: "8px" };
+      case "none":
+        return { background: "transparent", boxShadow: "none" };
+      default:
+        return { borderRadius: "999px" };
+    }
+  };
 
   const handleActionClick = () => {
     if (!ctaUrl || ctaUrl === "#") return;
@@ -1623,28 +4015,46 @@ export const Badge = ({
     window.location.href = ctaUrl;
   };
 
+  const alignmentMap = {
+    left: "flex-start",
+    center: "center",
+    right: "flex-end",
+  };
+
   return (
-    <section
-      ref={(ref: HTMLElement | null) => {
-        if (ref) connect(drag(ref));
-      }}
-      style={{
-        position: "relative",
-        overflow: "hidden",
-        background:
-          "linear-gradient(145deg, #fffdf2 0%, #fef3c7 45%, #fde68a 100%)",
-        border: `1px solid ${borderColor}`,
-        borderRadius,
-        boxShadow,
-        padding,
-        color: textColor,
-        fontFamily,
-        display: "inline-flex",
-        flexDirection: "column",
-        gap: "6px",
-        minWidth: "280px",
-      }}
-    >
+    <>
+      <style>{getAnimationKeyframes()}</style>
+      <section
+        ref={(ref: HTMLElement | null) => {
+          if (ref) connect(drag(ref));
+        }}
+        onMouseEnter={() => setBadgeHover(true)}
+        onMouseLeave={() => setBadgeHover(false)}
+        style={{
+          ...getLayoutStyles({ position, top, right, bottom, left, zIndex, width, height, minWidth, maxWidth, minHeight, maxHeight, margin, marginTop, marginRight, marginBottom, marginLeft } as BaseProps),
+          overflow: "hidden",
+          background: calculateBackground(),
+          border: `${borderWidth} ${borderStyle} ${borderColor}`,
+          borderRadius,
+          boxShadow: calculateBoxShadow(),
+          padding,
+          color: textColor,
+          fontFamily,
+          fontStyle: textStyle,
+          display: "flex",
+          flexDirection: "column",
+          gap,
+          width: actualWidth,
+          height,
+          flexShrink: 0,
+          alignItems: alignmentMap[badgeAlignment as keyof typeof alignmentMap] || "flex-start",
+          opacity: badgeOpacity,
+          transform: badgeHover ? getHoverTransform() : getTransform(),
+          animation: getAnimationString(),
+          transition: "transform 0.3s ease, opacity 0.3s ease",
+        }}
+      >
+      {/* Decorative gradient circle */}
       <div
         style={{
           position: "absolute",
@@ -1653,8 +4063,7 @@ export const Badge = ({
           width: "82px",
           height: "82px",
           borderRadius: "999px",
-          background:
-            "radial-gradient(circle, rgba(251,146,60,0.35) 0%, rgba(251,146,60,0) 70%)",
+          background: "radial-gradient(circle, rgba(251,146,60,0.35) 0%, rgba(251,146,60,0) 70%)",
           pointerEvents: "none",
         }}
       />
@@ -1672,6 +4081,25 @@ export const Badge = ({
         {subtitle}
       </p>
 
+      {showIcon && iconPosition !== "inline-title" && (
+        <span
+          style={{
+            width: iconSize,
+            height: iconSize,
+            borderRadius: "999px",
+            background: iconBgColor,
+            boxShadow: iconStyle !== "none" ? `0 8px 14px ${iconBgColor}44` : "none",
+            color: iconColor,
+            fontSize: `calc(${iconSize} * 0.5)`,
+            display: "grid",
+            placeItems: "center",
+            ...getIconBackgroundStyle(),
+          }}
+        >
+          {iconEmoji}
+        </span>
+      )}
+
       <h4
         style={{
           margin: 0,
@@ -1682,24 +4110,28 @@ export const Badge = ({
           lineHeight: 1.2,
           display: "flex",
           alignItems: "center",
-          gap: "10px",
+          gap: `calc(${iconSize} * 0.4)`,
         }}
       >
-        <span
-          style={{
-            width: "28px",
-            height: "28px",
-            borderRadius: "999px",
-            background: "linear-gradient(135deg, #f97316 0%, #f59e0b 100%)",
-            boxShadow: "0 8px 14px rgba(217,119,6,0.28)",
-            color: "#fff7ed",
-            fontSize: "14px",
-            display: "grid",
-            placeItems: "center",
-          }}
-        >
-          ★
-        </span>
+        {showIcon && iconPosition === "inline-title" && (
+          <span
+            style={{
+              width: iconSize,
+              height: iconSize,
+              borderRadius: "999px",
+              background: iconBgColor,
+              boxShadow: iconStyle !== "none" ? `0 8px 14px ${iconBgColor}44` : "none",
+              color: iconColor,
+              fontSize: `calc(${iconSize} * 0.5)`,
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              ...getIconBackgroundStyle(),
+            }}
+          >
+            {iconEmoji}
+          </span>
+        )}
         {title}
       </h4>
 
@@ -1738,13 +4170,62 @@ export const Badge = ({
           </button>
         </div>
       ) : null}
+      
+      {/* Count Badge */}
+      {countBadge && (
+        <div
+          style={{
+            position: "absolute",
+            top: "-8px",
+            right: "-8px",
+            backgroundColor: countBgColor,
+            color: countTextColor,
+            borderRadius: "999px",
+            width: "32px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "12px",
+            fontWeight: "bold",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            border: "2px solid white",
+          }}
+        >
+          {countNumber}
+        </div>
+      )}
     </section>
+    </>
   );
 };
 
 (Badge as any).craft = {
   displayName: "Badge",
   props: {
+    // Universal Layout & Positioning
+    position: "static",
+    top: "0",
+    right: "auto",
+    bottom: "auto",
+    left: "auto",
+    zIndex: 10,
+    width: "100%",
+    height: "auto",
+    minWidth: "240px",
+    maxWidth: "100%",
+    minHeight: "auto",
+    maxHeight: "auto",
+    margin: "0",
+    marginTop: "0",
+    marginRight: "0",
+    marginBottom: "0",
+    marginLeft: "0",
+    paddingTop: "0",
+    paddingRight: "0",
+    paddingBottom: "0",
+    paddingLeft: "0",
+    // Badge Content
     title: "Top Ranked",
     subtitle: "Achievement",
     description: "#1 in Academic Excellence 2026",
@@ -1761,6 +4242,7 @@ export const Badge = ({
     borderRadius: "999px",
     borderColor: "rgba(251,146,60,0.45)",
     padding: "16px",
+    gap: "6px",
     boxShadow: "0 20px 40px rgba(217,119,6,0.2)",
     showCta: false,
     ctaText: "View",
@@ -1769,9 +4251,51 @@ export const Badge = ({
     buttonColor: "#9a3412",
     buttonTextColor: "#ffffff",
     buttonHoverColor: "#7c2d12",
+    badgeSize: "medium",
+    badgeWidth: "300px",
+    badgeHeight: "auto",
+    badgeAlignment: "left",
+    iconBgColor: "#f97316",
+    iconStyle: "circle",
+    showIcon: true,
+    iconEmoji: "★",
+    iconSize: "28px",
+    iconColor: "#ffffff",
+    iconPosition: "inline-title",
+    badgePosition: "static",
+    badgeTop: "0",
+    badgeRight: "0",
+    badgeBottom: "auto",
+    badgeLeft: "auto",
+    badgeZIndex: 10,
+    badgeMargin: "0",
+    badgeMarginTop: "0",
+    badgeMarginRight: "0",
+    badgeMarginBottom: "0",
+    badgeMarginLeft: "0",
+    badgeTransform: "none",
+    badgeRotate: 0,
+    badgeScale: 1,
+    badgeOpacity: 1,
+    badgeAnimation: "none",
+    badgeAnimationDuration: "2s",
+    badgeAnimationDelay: "0s",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    badgeRotateOnHover: 0,
+    badgeScaleOnHover: 1,
+    shadowColor: "rgba(217,119,6,0.2)",
+    shadowBlur: "40px",
+    shadowSpread: "0px",
+    shadowOpacity: 1,
+    backgroundGradient: "none",
+    countBadge: false,
+    countNumber: "5",
+    countBgColor: "#ef4444",
+    countTextColor: "#ffffff",
   },
   related: {
-    toolbar: () => <BaseSettings showItems={false} />,
+    toolbar: () => <BadgeSettings />,
   },
 };
 
@@ -2681,6 +5205,10 @@ const BreadcrumbSettings = () => {
 
   return (
     <div className="p-4 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+      {/* LAYOUT & SPACING SECTION */}
+      <LayoutSettings />
+
+      {/* CONTENT SECTION */}
       <div>
         <label className="block text-xs font-semibold text-gray-600 mb-1.5">
           Breadcrumb Items (Label|URL per line)

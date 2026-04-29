@@ -2334,7 +2334,10 @@ ${message}`;
     const passed = checks.filter((check) => check.status === "pass").length;
     const warnings = checks.filter((check) => check.status === "warn").length;
     const critical = checks.filter((check) => check.status === "fail").length;
-    const score = Math.round((passed / checks.length) * 100);
+    // Score calculation: Pass = 100%, Warn = 60%, Fail = 0%
+    const score = Math.round(
+      ((passed + warnings * 0.6) / checks.length) * 100,
+    );
 
     const recommendations = checks
       .filter((check) => check.status !== "pass")
